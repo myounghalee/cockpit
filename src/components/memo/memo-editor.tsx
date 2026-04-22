@@ -63,20 +63,30 @@ export function MemoEditor({
     }
   }, [preview]);
 
-  // 프리뷰 영역에서 체크박스 클릭 시 N번째 [ ] ↔ [x] 토글
-  // GFM 은 - / * / + 모두 허용
+  // 프리뷰 영역에서 체크박스 클릭 시 N번째 [ ] ↔ [x] 토글.
+  // 두 형식 모두 수용: "- [ ]" (GFM 표준) / "[ ]" (bullet 없는 짧은 형식)
   function toggleTaskCheckbox(index: number) {
     let i = 0;
     let changed = false;
     const next = content.replace(
-      /([-*+]\s+)\[( |x|X)\]/g,
-      (_match, bullet, state) => {
-        if (i++ !== index) return _match;
+      /^(\s*(?:[-*+]\s+)?)\[( |x|X)\]/gm,
+      (match, prefix, state) => {
+        if (i++ !== index) return match;
         changed = true;
-        return `${bullet}[${state.trim() === "" ? "x" : " "}]`;
+        return `${prefix}[${state.trim() === "" ? "x" : " "}]`;
       },
     );
     if (changed) setContent(next);
+  }
+
+  // GFM 은 체크박스를 `- [ ]` 형태(리스트 아이템)로만 인식한다.
+  // 사용자가 간편하게 `[ ]` / `[x]` 만 써도 체크박스로 렌더되도록,
+  // 렌더 직전에 줄 앞쪽에 `- ` 자동 삽입 (원본 content 는 보존).
+  function normalizeForRender(src: string): string {
+    return src.replace(
+      /^(\s*)(\[[ xX]\])/gm,
+      (_m, indent, bracket) => `${indent}- ${bracket}`,
+    );
   }
 
   // 변경 시 1초 debounce 후 자동 저장
@@ -279,7 +289,9 @@ export function MemoEditor({
                     },
                   }}
                 >
-                  {content || "*내용 없음 — 더블클릭해서 편집*"}
+                  {normalizeForRender(
+                    content || "*내용 없음 — 더블클릭해서 편집*",
+                  )}
                 </ReactMarkdown>
               </article>
             );

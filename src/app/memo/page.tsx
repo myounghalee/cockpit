@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import { useMemos, type MemoProjectFilter } from "@/hooks/use-memos";
 import { useProjects } from "@/hooks/use-projects";
 import { useActiveProjectStore } from "@/store/active-project-store";
-import { MemoList } from "@/components/todo/memo-list";
-import { MemoEditor } from "@/components/todo/memo-editor";
-import { NewMemoDialog } from "@/components/todo/new-memo-dialog";
-import { ConvertDialog } from "@/components/todo/convert-dialog";
+import { MemoList } from "@/components/memo/memo-list";
+import { MemoEditor } from "@/components/memo/memo-editor";
+import { NewMemoDialog } from "@/components/memo/new-memo-dialog";
+import { ConvertDialog } from "@/components/memo/convert-dialog";
 import type { Memo } from "@/types/memo";
 
 export default function TodoPage() {
@@ -48,7 +48,7 @@ export default function TodoPage() {
       <header className="flex items-center gap-2 px-4 py-2.5 border-b border-[var(--color-border)]">
         <div className="flex items-center gap-2 mr-2">
           <StickyNote size={16} className="text-[var(--color-accent)]" />
-          <h1 className="text-sm font-semibold">ToDo</h1>
+          <h1 className="text-sm font-semibold">Memo</h1>
         </div>
 
         <select

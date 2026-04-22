@@ -10,7 +10,7 @@ import { useUiStore } from "@/store/ui-store";
 import { useTerminalStore } from "@/store/terminal-store";
 import { useQuickMemoStore } from "@/store/quick-memo-store";
 import { useTicketCompletionNotifier } from "@/hooks/use-ticket-completion-notifier";
-import { NewMemoDialog } from "@/components/todo/new-memo-dialog";
+import { NewMemoDialog } from "@/components/memo/new-memo-dialog";
 
 // 터미널 워크스페이스는 AppShell 하위에 항상 마운트되어 있으며,
 // /terminal 라우트가 아닐 때 hidden으로만 가려진다.
@@ -28,7 +28,7 @@ const NAV_SHORTCUTS: Record<string, string> = {
   "3": "/kanban",
   "4": "/git",
   "5": "/settings",
-  "6": "/todo",
+  "6": "/memo",
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {

@@ -29,7 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/kanban", label: "Kanban", icon: KanbanSquare, shortcut: "3" },
   { href: "/git", label: "Git", icon: GitBranch, shortcut: "4" },
   { href: "/settings", label: "Settings", icon: SettingsIcon, shortcut: "5" },
-  { href: "/todo", label: "ToDo", icon: StickyNote, shortcut: "6" },
+  { href: "/memo", label: "Memo", icon: StickyNote, shortcut: "6" },
 ];
 
 const IS_MAC =

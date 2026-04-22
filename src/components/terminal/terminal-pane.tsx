@@ -208,6 +208,7 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
 
   return (
     <div
+      data-pane-id={pane.id}
       className={cn(
         "relative flex flex-col h-full min-h-0 bg-[var(--color-background)] border border-transparent group",
         dnd.isDragOver && "border-[var(--color-accent)]",

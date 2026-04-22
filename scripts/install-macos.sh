@@ -139,8 +139,14 @@ log "Gatekeeper quarantine 속성 제거…"
 xattr -cr "/Applications/Cockpit.app" 2>/dev/null || true
 
 # ─── 8. 앱 실행 ───────────────────────────────────────────────
-log "Cockpit 실행…"
-open "/Applications/Cockpit.app"
+# COCKPIT_NO_AUTO_OPEN=1 이면 자동 실행 skip (배포 스크립트 등에서
+# .next 재빌드 후 수동 open 하려는 경우 race condition 방지용)
+if [[ "${COCKPIT_NO_AUTO_OPEN:-0}" == "1" ]]; then
+  log "자동 실행 skip (COCKPIT_NO_AUTO_OPEN=1)"
+else
+  log "Cockpit 실행…"
+  open "/Applications/Cockpit.app"
+fi
 
 echo ""
 log "✅ 설치 완료!"

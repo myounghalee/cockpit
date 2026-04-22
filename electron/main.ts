@@ -30,6 +30,9 @@ function resolveBgColor(): string {
 }
 
 function applyWindowTheme(win: BrowserWindow | null) {
+  // macOS native titlebar(traffic light 영역) 색상은 nativeTheme.themeSource 로 결정된다.
+  // setBackgroundColor 만 바꾸면 콘텐츠 아래 영역만 영향을 주고 타이틀바는 그대로.
+  nativeTheme.themeSource = currentThemeMode;
   if (!win || win.isDestroyed()) return;
   win.setBackgroundColor(resolveBgColor());
 }
@@ -341,7 +344,11 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     title: "Cockpit",
-    backgroundColor: resolveBgColor(),
+    // 창 생성 전에 themeSource 도 동기화 — 타이틀바 첫 렌더가 맞는 색으로
+    backgroundColor: (() => {
+      nativeTheme.themeSource = currentThemeMode;
+      return resolveBgColor();
+    })(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

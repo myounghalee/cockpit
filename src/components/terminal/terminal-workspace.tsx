@@ -2,7 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useTerminalStore, firstLeafPaneId } from "@/store/terminal-store";
+import {
+  useTerminalStore,
+  firstLeafPaneId,
+  flattenPanes,
+} from "@/store/terminal-store";
 import { useNewTabPickerStore } from "@/store/new-tab-picker-store";
 import { TerminalTabs } from "./terminal-tabs";
 import { TerminalSplit } from "./terminal-split";
@@ -54,6 +58,7 @@ export function TerminalWorkspace() {
       if (
         (e.metaKey || e.ctrlKey) &&
         e.shiftKey &&
+        !e.altKey &&
         (e.key === "ArrowLeft" || e.key === "ArrowRight")
       ) {
         const state = useTerminalStore.getState();
@@ -65,6 +70,44 @@ export function TerminalWorkspace() {
         const next =
           (idx + delta + state.tabs.length) % state.tabs.length;
         state.setActiveTab(state.tabs[next].id);
+        return;
+      }
+
+      // ── ⌘⌥←/→ split 내 pane 포커스 이동 (flat ordering, wrap) ──
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.altKey &&
+        !e.shiftKey &&
+        (e.key === "ArrowLeft" || e.key === "ArrowRight")
+      ) {
+        const state = useTerminalStore.getState();
+        const active = state.tabs.find((t) => t.id === state.activeTabId);
+        if (!active || active.type === "browser" || active.type === "file")
+          return;
+        const panes = flattenPanes(active.root);
+        if (panes.length <= 1) return;
+        e.preventDefault();
+        // 현재 focused pane 찾기 — activeElement 부모 체인에서 data-pane-id 조회
+        const activeEl =
+          typeof document !== "undefined"
+            ? (document.activeElement as HTMLElement | null)
+            : null;
+        const currentPaneEl = activeEl?.closest?.(
+          "[data-pane-id]",
+        ) as HTMLElement | null;
+        const currentId = currentPaneEl?.dataset?.paneId;
+        let currentIdx = 0;
+        if (currentId) {
+          const found = panes.findIndex((p) => p.id === currentId);
+          if (found >= 0) currentIdx = found;
+        }
+        const delta = e.key === "ArrowLeft" ? -1 : 1;
+        const next = (currentIdx + delta + panes.length) % panes.length;
+        window.dispatchEvent(
+          new CustomEvent("cockpit-focus-pane", {
+            detail: { paneId: panes[next].id },
+          }),
+        );
         return;
       }
 

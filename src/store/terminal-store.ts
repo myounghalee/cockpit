@@ -144,6 +144,11 @@ function findAllPanes(node: SplitNode): TerminalPane[] {
   return node.children.flatMap(findAllPanes);
 }
 
+// terminal-workspace 의 ⌘⌥←/→ 단축키가 트리 순회 없이 쓸 수 있도록 공개.
+export function flattenPanes(node: SplitNode): TerminalPane[] {
+  return findAllPanes(node);
+}
+
 function replaceLeaf(
   node: SplitNode,
   targetPaneId: string,

@@ -38,9 +38,13 @@ export function ProjectItem({ project, folders, onEdit, draggable: isDraggable }
   const updateMut = useUpdateProject();
   const deleteMut = useDeleteProject();
 
+  // Draggable id: draggable 일 때만 project.id 사용 (DnD-kit 식별자).
+  // Favorites 섹션처럼 draggable=false 인 경우 id 를 readonly-prefix 로 두어 같은
+  // project.id 가 원본/즐겨찾기 두 곳에 중복 등록되지 않도록 한다. (중복되면
+  // 원본을 드래그할 때 즐겨찾기 쪽도 transform 이 적용돼 같이 움직임)
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
-      id: project.id,
+      id: isDraggable ? project.id : `readonly-${project.id}`,
       disabled: !isDraggable,
     });
 

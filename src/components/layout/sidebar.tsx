@@ -11,6 +11,7 @@ import {
   FolderKanban,
   Settings as SettingsIcon,
   StickyNote,
+  BarChart3,
 } from "lucide-react";
 import { useUiStore } from "@/store/ui-store";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/git", label: "Git", icon: GitBranch, shortcut: "4" },
   { href: "/settings", label: "Settings", icon: SettingsIcon, shortcut: "5" },
   { href: "/memo", label: "Memo", icon: StickyNote, shortcut: "6" },
+  { href: "/insights", label: "Insights", icon: BarChart3, shortcut: "7" },
 ];
 
 const IS_MAC =

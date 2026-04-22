@@ -482,24 +482,36 @@ export const useTerminalStore = create<TerminalState>()(
       setPaneStatus: (paneId, busy, command, awaitingInput) => {
         set((s) => {
           const prev = s.paneStatuses[paneId];
-          // busy → idle 전환 = "방금 완료"
+          // ── 전환 이벤트 ──
+          // justCompleted: 작업 종료 (명확한 알림 대상)
           const justCompleted = !!prev?.busy && !busy;
-          // awaitingInput 처음 true 로 전환 = "응답 대기 시작"
-          const justStartedAwaiting =
-            !prev?.awaitingInput && awaitingInput;
+          // startedNewBusyCycle: 새 작업 시작 (acknowledged 리셋 트리거로 활용)
+          const startedNewBusyCycle = !prev?.busy && busy;
+          // isFirstContact: 이 pane 에 대한 최초 status
+          const isFirstContact = !prev;
+
           const completedAt = justCompleted
             ? Date.now()
             : busy
               ? null
               : (prev?.completedAt ?? null);
-          // acknowledged 리셋 조건 (알림 재개):
-          //   (a) 방금 완료 → 깜빡임 시작
-          //   (b) 방금 응답 대기 진입 → 깜빡임 시작
-          // 그 외는 prev 유지 (같은 대기 상태에서 계속 true 로 받아도 조용)
-          const acknowledged =
-            justCompleted || justStartedAwaiting
-              ? false
-              : (prev?.acknowledged ?? true);
+
+          // acknowledged 리셋 정책:
+          //   (1) 방금 완료     → 깜빡임 시작 (명확한 신호)
+          //   (2) 새 busy cycle → 다음 awaiting 때 깜빡임 가능하도록 미리 리셋
+          //   (3) 첫 접촉인데 이미 awaitingInput 이면 → 깜빡임 시작
+          //   (그 외)           → prev 유지
+          // 중요: awaiting 가 false↔true 토글(커서 깜빡임 등으로 lastOutputAt 변동)만
+          //       으로는 리셋하지 않음 → "한 번 보면 같은 작업 내내 조용"
+          let acknowledged: boolean;
+          if (justCompleted || startedNewBusyCycle) {
+            acknowledged = false;
+          } else if (isFirstContact && awaitingInput) {
+            acknowledged = false;
+          } else {
+            acknowledged = prev?.acknowledged ?? true;
+          }
+
           return {
             paneStatuses: {
               ...s.paneStatuses,

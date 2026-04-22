@@ -50,14 +50,16 @@ export function MemoEditor({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // 메모가 바뀌면(다른 메모 선택) 로컬 상태도 리셋 — 다시 미리보기로
+  // 다른 메모를 선택했을 때만 로컬 상태 리셋 (타자 중 자동저장으로 memo prop이
+  // 갱신되어도 preview 로 튕기지 않도록 deps 는 memo.id 로 한정)
   useEffect(() => {
     setTitle(memo.title);
     setContent(memo.content);
     setTags(memo.tags);
     setPreview(true);
     setSaveState("idle");
-  }, [memo.id, memo.title, memo.content, memo.tags]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memo.id]);
 
   // 편집 모드로 진입하면 textarea에 포커스
   useEffect(() => {
@@ -67,14 +69,18 @@ export function MemoEditor({
   }, [preview]);
 
   // 프리뷰 영역에서 체크박스 클릭 시 N번째 [ ] ↔ [x] 토글
+  // GFM 은 - / * / + 모두 허용
   function toggleTaskCheckbox(index: number) {
     let i = 0;
     let changed = false;
-    const next = content.replace(/- \[( |x|X)\]/g, (match, state) => {
-      if (i++ !== index) return match;
-      changed = true;
-      return state.trim() === "" ? "- [x]" : "- [ ]";
-    });
+    const next = content.replace(
+      /([-*+]\s+)\[( |x|X)\]/g,
+      (_match, bullet, state) => {
+        if (i++ !== index) return _match;
+        changed = true;
+        return `${bullet}[${state.trim() === "" ? "x" : " "}]`;
+      },
+    );
     if (changed) setContent(next);
   }
 

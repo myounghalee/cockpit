@@ -114,12 +114,13 @@ export function ProjectList() {
               </div>
               <div className="flex flex-col gap-0.5 pl-1">
                 {favorites.map((p) => (
+                  // Favorites는 "원본을 즐겨찾기한 view" — 이동 시 원본 섹션만
+                  // 움직이는 게 자연스럽기 때문에 draggable 해제.
                   <ProjectItem
                     key={`fav-${p.id}`}
                     project={p}
                     folders={data.folders}
                     onEdit={setEditing}
-                    draggable
                   />
                 ))}
               </div>

@@ -1,7 +1,7 @@
 {
   "name": "cockpit",
   "productName": "Cockpit",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "private": true,
   "description": "Integrated developer workbench — terminals, kanban, git — in one place.",
   "main": "dist-electron/main.js",

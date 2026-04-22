@@ -119,12 +119,26 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
     ws.connect();
 
     // Shift+Enter → 줄바꿈 전송 (Claude CLI 멀티라인 입력용)
+    // Esc → xterm blur (shell 에 전달 안 함) — 외부 포커스로 빠져나오기
     // 한글 IME 조합 중(isComposing)에는 무시하여 이중 입력 방지
     term.attachCustomKeyEventHandler((e) => {
       if (e.isComposing) return true;
       if (e.key === "Enter" && e.shiftKey) {
         if (e.type === "keydown") {
           ws.send({ type: "input", data: "\n" });
+        }
+        return false;
+      }
+      if (e.key === "Escape" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (e.type === "keydown") {
+          // blur하면 xterm textarea에서 포커스 빠져나옴 → 외부 window keydown 이
+          // 다시 받을 수 있게 됨. shell 로 Esc 전달은 차단(대부분 불필요).
+          term.blur();
+          // 포커스를 body 로 명시적 이동 (아니면 xterm 컨테이너에 남을 수 있음)
+          requestAnimationFrame(() => {
+            (document.activeElement as HTMLElement | null)?.blur?.();
+            document.body.focus?.();
+          });
         }
         return false;
       }
@@ -170,6 +184,18 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
       termRef.current.focus();
     }
   }, [isActive]);
+
+  // 외부 (terminal-workspace의 Enter 단축키 등) 에서 특정 pane 으로 포커스 요청
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { paneId?: string } | undefined;
+      if (detail?.paneId === pane.id && termRef.current) {
+        termRef.current.focus();
+      }
+    };
+    window.addEventListener("cockpit-focus-pane", handler);
+    return () => window.removeEventListener("cockpit-focus-pane", handler);
+  }, [pane.id]);
 
   // 설정에서 폰트 크기 바뀌면 실시간 반영 + fit으로 열/행 재계산
   useEffect(() => {

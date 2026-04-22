@@ -103,6 +103,12 @@ function rightmostLeafPaneId(node: SplitNode): string {
   return rightmostLeafPaneId(node.children[node.children.length - 1]);
 }
 
+/** 분할 트리의 첫 번째 leaf pane 의 id — "Enter 로 첫 터미널 focus" 용 */
+export function firstLeafPaneId(node: SplitNode): string {
+  if (node.type === "leaf") return node.pane.id;
+  return firstLeafPaneId(node.children[0]);
+}
+
 async function createPty(opts?: {
   cwd?: string;
   projectId?: string;

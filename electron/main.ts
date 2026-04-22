@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, shell, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, Menu, shell, dialog, ipcMain, nativeTheme } from "electron";
 import { spawn, execFile, type ChildProcess } from "child_process";
 import { promisify } from "node:util";
 import * as path from "path";
@@ -11,6 +11,28 @@ const execFileAsync = promisify(execFile);
 
 // 앱 이름 및 Bundle ID (macOS 알림 센터/Launchpad 등록에 사용)
 app.setName("Cockpit");
+
+// ─── 테마 연동 ────────────────────────────────────────────────
+// 앱 창 배경색(= macOS 타이틀바 색)을 라이트/다크에 맞춰 동적 변경.
+// renderer의 ThemeStore가 사용자 선택("system" | "light" | "dark")을
+// IPC로 알려주면 여기서 실제 nativeTheme + setBackgroundColor 적용.
+type ThemeMode = "system" | "light" | "dark";
+let currentThemeMode: ThemeMode = "system";
+// globals.css 의 --color-background 와 일치해야 한다.
+const BG_DARK = "#0b0d12";
+const BG_LIGHT = "#f8f9fb";
+
+function resolveBgColor(): string {
+  const effectiveDark =
+    currentThemeMode === "dark" ||
+    (currentThemeMode === "system" && nativeTheme.shouldUseDarkColors);
+  return effectiveDark ? BG_DARK : BG_LIGHT;
+}
+
+function applyWindowTheme(win: BrowserWindow | null) {
+  if (!win || win.isDestroyed()) return;
+  win.setBackgroundColor(resolveBgColor());
+}
 // Windows: AppUserModelId (작업 표시줄 그룹화 + 알림 표시에 필요)
 if (process.platform === "win32") {
   app.setAppUserModelId("dev.cockpit.app");
@@ -319,7 +341,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     title: "Cockpit",
-    backgroundColor: "#0b0d12",
+    backgroundColor: resolveBgColor(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -327,6 +349,9 @@ function createWindow(): void {
       webviewTag: true, // <webview> 활성화 — 브라우저 pane에서 X-Frame-Options 우회용
     },
   });
+
+  // 시스템 다크/라이트 변경에 즉시 반응 (사용자 모드가 "system" 일 때만 의미 있음)
+  nativeTheme.on("updated", () => applyWindowTheme(mainWindow));
 
   mainWindow.loadURL(`http://127.0.0.1:${PORT}`);
 
@@ -631,6 +656,13 @@ app.whenReady().then(async () => {
   ipcMain.handle("cockpit:apply-update", () => {
     app.relaunch();
     app.exit(0);
+  });
+  // 테마 모드 동기화 — renderer의 ThemeStore가 변경 시 호출
+  ipcMain.on("cockpit:set-theme-mode", (_e, mode: ThemeMode) => {
+    if (mode === "system" || mode === "light" || mode === "dark") {
+      currentThemeMode = mode;
+      applyWindowTheme(mainWindow);
+    }
   });
   buildMenu();
 

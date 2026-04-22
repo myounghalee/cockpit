@@ -24,4 +24,8 @@ contextBridge.exposeInMainWorld("cockpit", {
   /** 마지막 업데이트 실패 메시지 조회 */
   getUpdateError: (): Promise<string | null> =>
     ipcRenderer.invoke("cockpit:get-update-error"),
+  /** 테마 모드 동기화 — 창 배경색(= macOS 타이틀바 색) 즉시 반영 */
+  setThemeMode: (mode: "system" | "light" | "dark") => {
+    ipcRenderer.send("cockpit:set-theme-mode", mode);
+  },
 });

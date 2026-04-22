@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Star, MoreHorizontal, Folder, ExternalLink, GripVertical } from "lucide-react";
+import { Star, MoreHorizontal, Folder, ExternalLink } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
 import {
   DropdownMenu,
@@ -81,8 +81,20 @@ export function ProjectItem({ project, folders, onEdit, draggable: isDraggable }
       }
     : undefined;
 
+  // drag 영역 — draggable 일 때 바깥 div 전체에 listeners 적용.
+  // activationConstraint(distance: 6) 덕에 6px 이상 움직여야 drag 시작 → 그 이하는 click 으로 취급.
+  const dragProps = isDraggable ? { ...attributes, ...listeners } : {};
+
   return (
-    <div ref={setNodeRef} style={style} className={isDragging ? "pointer-events-none" : ""}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...dragProps}
+      className={cn(
+        isDragging && "pointer-events-none",
+        isDraggable && "cursor-grab active:cursor-grabbing",
+      )}
+    >
       <Link
         href={`/projects/${project.id}`}
         className={cn(
@@ -92,19 +104,8 @@ export function ProjectItem({ project, folders, onEdit, draggable: isDraggable }
             : "text-[var(--color-foreground)] hover:bg-[var(--color-surface-hover)]",
         )}
       >
-        {/* 드래그 핸들 */}
-        {isDraggable && (
-          <span
-            {...attributes}
-            {...listeners}
-            className="p-0.5 rounded cursor-grab active:cursor-grabbing text-[var(--color-foreground-dim)] opacity-0 group-hover:opacity-60 flex-shrink-0"
-            onClick={(e) => e.preventDefault()}
-          >
-            <GripVertical size={12} />
-          </span>
-        )}
-
         <button
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();

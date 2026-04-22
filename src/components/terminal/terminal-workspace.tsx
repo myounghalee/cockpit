@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useTerminalStore } from "@/store/terminal-store";
+import { useTerminalStore, firstLeafPaneId } from "@/store/terminal-store";
 import { useNewTabPickerStore } from "@/store/new-tab-picker-store";
 import { TerminalTabs } from "./terminal-tabs";
 import { TerminalSplit } from "./terminal-split";
@@ -43,28 +43,91 @@ export function TerminalWorkspace() {
   }, [hydrated, syncWithServer, createTab]);
 
   // 전역 단축키
-  //  ⌘T       → 프로젝트 선택 picker 열기 (키보드 네비로 선택 후 엔터)
-  //  ⌘⇧T      → 활성 탭에 horizontal split + 활성 프로젝트 cwd
-  //  ⌘W       → 탭 닫기
+  //  ⌘T        → 프로젝트 선택 picker 열기 (키보드 네비로 선택 후 엔터)
+  //  ⌘⇧T       → 활성 탭에 horizontal split + 활성 프로젝트 cwd
+  //  ⌘W        → 활성 탭 닫기 (confirm 다이얼로그)
+  //  ⌘⇧←/→    → 이전/다음 탭 전환 (wrap around)
+  //  Enter     → 터미널 화면에서 xterm 밖 focus 일 때 첫 pane 에 focus
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // ── ⌘⇧←/→ 탭 전환 ──
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.shiftKey &&
+        (e.key === "ArrowLeft" || e.key === "ArrowRight")
+      ) {
+        const state = useTerminalStore.getState();
+        if (state.tabs.length <= 1) return;
+        e.preventDefault();
+        const idx = state.tabs.findIndex((t) => t.id === state.activeTabId);
+        if (idx < 0) return;
+        const delta = e.key === "ArrowLeft" ? -1 : 1;
+        const next =
+          (idx + delta + state.tabs.length) % state.tabs.length;
+        state.setActiveTab(state.tabs[next].id);
+        return;
+      }
+
+      // ── Enter (mod 없음) → 첫 터미널 pane 에 focus ──
+      if (
+        e.key === "Enter" &&
+        !e.metaKey &&
+        !e.ctrlKey &&
+        !e.shiftKey &&
+        !e.altKey
+      ) {
+        // xterm/input 안에서 발생한 Enter 는 무시 (그들이 이미 처리)
+        const el = e.target as HTMLElement | null;
+        if (
+          el &&
+          (el.closest(".xterm") ||
+            el.tagName === "INPUT" ||
+            el.tagName === "TEXTAREA" ||
+            el.isContentEditable)
+        ) {
+          return;
+        }
+        // 터미널 화면에 있을 때만 focus 점프
+        if (
+          typeof window === "undefined" ||
+          window.location.pathname !== "/terminal"
+        ) {
+          return;
+        }
+        const state = useTerminalStore.getState();
+        const active = state.tabs.find((t) => t.id === state.activeTabId);
+        if (!active || active.type === "browser" || active.type === "file") return;
+        const firstId = firstLeafPaneId(active.root);
+        window.dispatchEvent(
+          new CustomEvent("cockpit-focus-pane", { detail: { paneId: firstId } }),
+        );
+        return;
+      }
+
+      // ── ⌘T / ⌘⇧T / ⌘W ──
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       if (e.key === "t" || e.key === "T") {
         e.preventDefault();
-        // 터미널 화면이 아니면 먼저 이동 (picker/split이 보이는 맥락 확보)
         if (typeof window !== "undefined" && window.location.pathname !== "/terminal") {
           router.push("/terminal");
         }
         if (e.shiftKey) {
-          // ⌘⇧T — 활성 탭의 오른쪽에 새 터미널 split (활성 프로젝트 cwd)
           void splitRightmost();
         } else {
-          // ⌘T — picker 열기 (즉시 탭 만들지 않음)
           openNewTabPicker();
         }
-      } else if ((e.key === "w" || e.key === "W") && activeTabId && !e.shiftKey) {
+      } else if (
+        (e.key === "w" || e.key === "W") &&
+        activeTabId &&
+        !e.shiftKey
+      ) {
         e.preventDefault();
+        const state = useTerminalStore.getState();
+        const tab = state.tabs.find((t) => t.id === activeTabId);
+        const name = tab?.name ?? "이 탭";
+        // 실수로 닫는 것 방지 — confirm 다이얼로그
+        if (!confirm(`"${name}" 탭을 닫을까요?`)) return;
         void closeTab(activeTabId);
       }
     };

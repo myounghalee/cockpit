@@ -59,36 +59,24 @@ export function TerminalTabs() {
     else void createTab();
   };
 
-  // 탭의 "주목 필요" 상태 — 다음 중 하나일 때 깜빡임:
-  //   (a) 어떤 pane 이 awaitingInput 상태 (Claude y/n 대기 등)
-  //   (b) 어떤 pane 이 최근 busy→idle 전환 (작업 완료 알림)
-  // 단순 busy (출력 활발하게 나오는 중) 는 깜빡이지 않음.
-  // completedAt 은 setActiveTab 에서 리셋되므로 "탭 보면 사라짐".
+  // 탭의 "완료 알림" 상태 — 아래 조건 모두 만족 시 깜빡임:
+  //   - pane 이 방금 busy → idle 전환 (completedAt 존재)
+  //   - 현재 busy 아님
+  //   - 사용자가 아직 탭을 보지 않음 (acknowledged === false)
+  // 단순 실행 중 / 응답 대기 중은 깜빡이지 않음 — 사용자 요청에 따라 완료만 알림.
   const tabRunState = (tab: (typeof tabs)[number]) => {
     if (tab.type === "browser" || tab.type === "file") {
-      return {
-        attention: false,
-        reason: null as "awaiting" | "completed" | null,
-        command: null as string | null,
-      };
+      return { attention: false, command: null as string | null };
     }
     const panes = flattenPanes(tab.root);
     for (const p of panes) {
       const st = paneStatuses[p.id];
       if (!st) continue;
-      if (st.awaitingInput) {
-        return { attention: true, reason: "awaiting", command: st.command };
+      if (!st.busy && st.completedAt !== null && !st.acknowledged) {
+        return { attention: true, command: st.command };
       }
     }
-    for (const p of panes) {
-      const st = paneStatuses[p.id];
-      if (!st) continue;
-      // busy → idle 전환 후 아직 dismiss 안 된 탭
-      if (!st.busy && st.completedAt !== null) {
-        return { attention: true, reason: "completed", command: st.command };
-      }
-    }
-    return { attention: false, reason: null, command: null };
+    return { attention: false, command: null };
   };
 
   return (
@@ -136,12 +124,10 @@ export function TerminalTabs() {
             tab.id === activeTabId
               ? "bg-[var(--color-background)] text-[var(--color-foreground)] border-b-2 border-b-[var(--color-accent)]"
               : "text-[var(--color-foreground-muted)]",
-            // 주목 필요한 비활성 탭 — 이름 색도 강조 (응답 대기 또는 방금 완료)
+            // 완료 알림 있는 비활성 탭 — 이름도 success 색으로 강조
             runState.attention &&
               tab.id !== activeTabId &&
-              (runState.reason === "awaiting"
-                ? "text-[var(--color-accent)]/90"
-                : "text-[var(--color-success)]/90"),
+              "text-[var(--color-success)]/90",
             dragIndex === idx && "opacity-40",
             dragOverIndex === idx &&
               dragIndex !== idx &&
@@ -153,22 +139,13 @@ export function TerminalTabs() {
           ) : tab.type === "file" ? (
             <FileText size={12} className="flex-shrink-0 opacity-70" />
           ) : runState.attention ? (
-            // 주목 필요 (응답 대기 또는 방금 완료) — 깜빡이는 도트
+            // 방금 완료 — 탭을 보면 acknowledged=true 로 바뀌어 깜빡임 중지
             <span
-              className={cn(
-                "w-1.5 h-1.5 rounded-full flex-shrink-0 mx-[3px] animate-cockpit-blink",
-                runState.reason === "awaiting"
-                  ? "bg-[var(--color-accent)]"
-                  : "bg-[var(--color-success)]",
-              )}
+              className="w-1.5 h-1.5 rounded-full flex-shrink-0 mx-[3px] animate-cockpit-blink bg-[var(--color-success)]"
               title={
-                runState.reason === "awaiting"
-                  ? runState.command
-                    ? `응답 대기 중: ${runState.command}`
-                    : "응답 대기 중"
-                  : runState.command
-                    ? `방금 완료: ${runState.command}`
-                    : "방금 완료"
+                runState.command
+                  ? `완료: ${runState.command}`
+                  : "작업 완료"
               }
             />
           ) : (

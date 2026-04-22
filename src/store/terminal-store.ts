@@ -29,6 +29,13 @@ export interface PaneStatus {
    * 탭 클릭 시 null 로 초기화되어 깜빡임 종료.
    */
   completedAt: number | null;
+  /**
+   * 사용자가 "이 탭을 봤음" 플래그. true 면 깜빡임 중지.
+   * - setActiveTab 시 true 로 세팅 (dismiss)
+   * - 새로운 상태 전환(새 작업 시작, 새 응답 대기)이 감지되면 다시 false 로 리셋
+   *   → 다음 알림은 다시 깜빡여서 주의 환기
+   */
+  acknowledged: boolean;
 }
 
 interface TerminalState {
@@ -475,17 +482,28 @@ export const useTerminalStore = create<TerminalState>()(
       setPaneStatus: (paneId, busy, command, awaitingInput) => {
         set((s) => {
           const prev = s.paneStatuses[paneId];
-          // busy → idle 전환 시점 기록 (깜빡임의 두 번째 트리거)
-          const completedAt =
-            prev?.busy && !busy
-              ? Date.now()
-              : busy
-                ? null
-                : (prev?.completedAt ?? null);
+          // busy → idle 전환 = "방금 완료". 이 순간에만 알림을 띄움.
+          const justCompleted = !!prev?.busy && !busy;
+          const completedAt = justCompleted
+            ? Date.now()
+            : busy
+              ? null // 다시 실행 시작하면 이전 완료 기록은 리셋
+              : (prev?.completedAt ?? null);
+          // acknowledged 기본은 true (조용). 완료 이벤트가 새로 발생하면 false 로
+          // 내려 깜빡임이 재개됨 → 사용자가 탭을 클릭해 setActiveTab 이 true 로 돌려놓음.
+          const acknowledged = justCompleted
+            ? false
+            : (prev?.acknowledged ?? true);
           return {
             paneStatuses: {
               ...s.paneStatuses,
-              [paneId]: { busy, command, awaitingInput, completedAt },
+              [paneId]: {
+                busy,
+                command,
+                awaitingInput,
+                completedAt,
+                acknowledged,
+              },
             },
           };
         });
@@ -565,9 +583,9 @@ export const useTerminalStore = create<TerminalState>()(
 
       setActiveTab: (tabId) => {
         set((s) => {
-          // 활성화 시 해당 탭의 모든 pane 의 completedAt 을 null 로 초기화
-          // → "방금 완료" 깜빡임이 사용자가 탭을 보는 순간 꺼짐 (dismiss 효과).
-          // awaitingInput 은 서버가 계속 true 로 보내면 유지됨.
+          // 활성화 시 해당 탭의 모든 pane 을 acknowledged=true 로 세팅 →
+          // 깜빡임 즉시 중지. 다음 완료 이벤트(busy→idle 전환)가 들어오면
+          // setPaneStatus 에서 acknowledged=false 로 자동 리셋되어 다시 알림.
           const tab = s.tabs.find((t) => t.id === tabId);
           if (!tab || tab.type === "browser" || tab.type === "file") {
             return { activeTabId: tabId };
@@ -577,8 +595,8 @@ export const useTerminalStore = create<TerminalState>()(
           let changed = false;
           for (const pane of panes) {
             const st = nextStatuses[pane.id];
-            if (st && st.completedAt !== null) {
-              nextStatuses[pane.id] = { ...st, completedAt: null };
+            if (st && !st.acknowledged) {
+              nextStatuses[pane.id] = { ...st, acknowledged: true };
               changed = true;
             }
           }

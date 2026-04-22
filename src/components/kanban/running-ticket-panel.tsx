@@ -13,6 +13,7 @@ import {
   FileText,
   ChevronRight,
   Activity,
+  Play,
 } from "lucide-react";
 import { useTerminalStore } from "@/store/terminal-store";
 // markdown fontSize 공유 (Settings에서 조절)
@@ -83,10 +84,33 @@ export function RunningTicketPanel({ ticket, projectId, onClose }: Props) {
   const qc = useQueryClient();
   const [advancing, setAdvancing] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const stage = isPdcaStage(ticket.pdcaStage) ? ticket.pdcaStage : null;
   const isLastStage = stage === "report";
   const isRunning = ticket.status === "in_progress";
+  // 한 번이라도 실행된 적 있는가. startedAt이 생겼다는 건 /api/tickets/:id/run이
+  // 성공한 적 있다는 뜻. 이 값이 false면 아직 "시작 전" 상태라 승인/중지/완료 버튼은 의미 없음.
+  const hasBeenStarted = !!ticket.startedAt;
+
+  const runTicket = useCallback(async () => {
+    if (starting) return;
+    setStarting(true);
+    try {
+      const res = await fetch(`/api/tickets/${ticket.id}/run`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `${res.status}`);
+      }
+      qc.invalidateQueries({ queryKey: ["tickets"] });
+    } catch (err) {
+      alert(`실행 실패: ${(err as Error).message}`);
+    } finally {
+      setStarting(false);
+    }
+  }, [ticket.id, qc, starting]);
 
   // 사용자가 PDCA 카드에서 탭 클릭하여 열람 중인 단계.
   // 티켓이 바뀌거나 stage가 다음 단계로 진행하면 자동으로 현재 단계로 sync.
@@ -550,48 +574,70 @@ export function RunningTicketPanel({ ticket, projectId, onClose }: Props) {
       </div>
 
       <div className="border-t border-[var(--color-border)] p-2 flex flex-col gap-1.5">
-        {stage && (
+        {!hasBeenStarted ? (
+          // 아직 한 번도 실행 안 된 티켓 — "시작" 버튼만 노출.
+          // 승인/중지/완료는 실행 흐름이 시작돼야 의미가 있으므로 감춤.
           <button
-            onClick={advanceStage}
-            disabled={advancing || isRunning}
-            title={
-              isRunning ? "실행이 끝난 뒤 승인할 수 있습니다" : undefined
-            }
-            className="flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 rounded bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={runTicket}
+            disabled={starting}
+            className="flex items-center justify-center gap-1.5 text-sm px-3 py-2 rounded bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            <ChevronRight size={12} />
-            {advancing
-              ? "전환 중…"
-              : isLastStage
-                ? autoDoneOnReport
-                  ? "사이클 완료 → Done"
-                  : "사이클 종료"
-                : `${PDCA_LABEL[stage]} 승인 → 다음 단계`}
+            <Play size={13} fill="currentColor" />
+            {starting
+              ? "시작 중…"
+              : ticket.sessionId
+                ? "이어서 실행"
+                : "PDCA 실행 시작"}
           </button>
+        ) : (
+          <>
+            {stage && (
+              <button
+                onClick={advanceStage}
+                disabled={advancing || isRunning}
+                title={
+                  isRunning ? "실행이 끝난 뒤 승인할 수 있습니다" : undefined
+                }
+                className="flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 rounded bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ChevronRight size={12} />
+                {advancing
+                  ? "전환 중…"
+                  : isLastStage
+                    ? autoDoneOnReport
+                      ? "사이클 완료 → Done"
+                      : "사이클 종료"
+                    : `${PDCA_LABEL[stage]} 승인 → 다음 단계`}
+              </button>
+            )}
+            {/* Claude 열기: sessionId가 있을 때만 (없으면 이어갈 세션이 없음) */}
+            {ticket.sessionId && (
+              <button
+                onClick={openClaude}
+                className="flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 rounded bg-[var(--color-accent)]/10 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20"
+                title="이 세션을 터미널에서 대화형으로 이어가기"
+              >
+                <TerminalIcon size={12} />
+                Claude 열기
+              </button>
+            )}
+            <div className="flex gap-1.5">
+              <button
+                onClick={stop}
+                disabled={!isRunning || stopping}
+                className="flex-1 flex items-center justify-center gap-1 text-xs px-2 py-1.5 rounded border border-[var(--color-border)] text-[var(--color-foreground-muted)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Square size={11} /> {stopping ? "중지 중…" : "중지"}
+              </button>
+              <button
+                onClick={markDone}
+                className="flex-1 flex items-center justify-center gap-1 text-xs px-2 py-1.5 rounded border border-[var(--color-border)] text-green-400 hover:bg-green-500/10"
+              >
+                <Check size={11} /> 완료
+              </button>
+            </div>
+          </>
         )}
-        <button
-          onClick={openClaude}
-          className="flex items-center justify-center gap-1.5 text-xs px-2 py-1.5 rounded bg-[var(--color-accent)]/10 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20"
-          title="이 세션을 터미널에서 대화형으로 이어가기"
-        >
-          <TerminalIcon size={12} />
-          Claude 열기
-        </button>
-        <div className="flex gap-1.5">
-          <button
-            onClick={stop}
-            disabled={!isRunning || stopping}
-            className="flex-1 flex items-center justify-center gap-1 text-xs px-2 py-1.5 rounded border border-[var(--color-border)] text-[var(--color-foreground-muted)] hover:bg-[var(--color-surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Square size={11} /> {stopping ? "중지 중…" : "중지"}
-          </button>
-          <button
-            onClick={markDone}
-            className="flex-1 flex items-center justify-center gap-1 text-xs px-2 py-1.5 rounded border border-[var(--color-border)] text-green-400 hover:bg-green-500/10"
-          >
-            <Check size={11} /> 완료
-          </button>
-        </div>
       </div>
     </div>
   );

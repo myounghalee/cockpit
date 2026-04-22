@@ -36,8 +36,20 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
-        { "target": "dmg", "arch": ["arm64", "x64"] },
-        { "target": "zip", "arch": ["arm64", "x64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
       ],
       "identity": null,
       "hardenedRuntime": false,
@@ -70,6 +82,7 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^2.1.7",
+    "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^2.6.0",
     "tsx": "^4.19.2",
@@ -89,7 +102,7 @@
     "postcss": "^8.4.49",
     "prisma": "^5.22.0",
     "tailwindcss": "^4.0.0-beta.7",
-    "typescript": "^5.7.2"
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=20.0.0"

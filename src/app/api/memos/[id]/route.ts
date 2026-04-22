@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { appendDailyEntry } from "@/lib/daily-log";
 
 interface PatchBody {
   title?: string;
@@ -35,7 +36,26 @@ export async function PATCH(
   }
 
   try {
-    const updated = await prisma.memo.update({ where: { id }, data });
+    const before =
+      body.archived === true
+        ? await prisma.memo.findUnique({
+            where: { id },
+            select: { archivedAt: true },
+          })
+        : null;
+    const updated = await prisma.memo.update({
+      where: { id },
+      data,
+      include: { project: { select: { name: true } } },
+    });
+    // archive 토글 true → archivedAt이 새로 생긴 경우에만 기록
+    if (body.archived === true && before && before.archivedAt === null) {
+      appendDailyEntry({
+        kind: "memo.archived",
+        title: updated.title,
+        projectName: updated.project?.name ?? null,
+      });
+    }
     return NextResponse.json(updated);
   } catch {
     return NextResponse.json({ error: "not found" }, { status: 404 });

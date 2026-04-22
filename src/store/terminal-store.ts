@@ -19,7 +19,15 @@ import { useActiveProjectStore } from "./active-project-store";
 export interface PaneStatus {
   busy: boolean;
   command: string | null;
-  /** busy → idle 전환 시점 (ms). idle 유지 중이면 null */
+  /**
+   * busy + 최근 출력 없음 → 사용자 입력 대기 추정.
+   * 깜빡임 트리거 (첫 번째 조건).
+   */
+  awaitingInput: boolean;
+  /**
+   * busy → idle 전환 시점 (ms). 깜빡임 트리거 (두 번째 조건 — 방금 완료).
+   * 탭 클릭 시 null 로 초기화되어 깜빡임 종료.
+   */
   completedAt: number | null;
 }
 
@@ -29,7 +37,12 @@ interface TerminalState {
   hydrated: boolean; // persist 복원 완료 플래그
   /** 각 terminal pane 의 현재 실행 상태 (서버 폴링 기반). persist 안 됨. */
   paneStatuses: Record<string, PaneStatus>;
-  setPaneStatus: (paneId: string, busy: boolean, command: string | null) => void;
+  setPaneStatus: (
+    paneId: string,
+    busy: boolean,
+    command: string | null,
+    awaitingInput: boolean,
+  ) => void;
   /** 파일 뷰어에서 성공적으로 열었던 최근 경로들 (최신 먼저, 최대 10개) */
   recentFiles: string[];
   /** 브라우저에서 방문했던 최근 URL들 (최신 먼저, 최대 10개) */
@@ -459,10 +472,10 @@ export const useTerminalStore = create<TerminalState>()(
       preferredEditor: "vscode",
       customEditorCommand: "",
 
-      setPaneStatus: (paneId, busy, command) => {
+      setPaneStatus: (paneId, busy, command, awaitingInput) => {
         set((s) => {
           const prev = s.paneStatuses[paneId];
-          // busy → idle 전환 시점 기록 (UI 가 "방금 완료" 페이드 처리 가능)
+          // busy → idle 전환 시점 기록 (깜빡임의 두 번째 트리거)
           const completedAt =
             prev?.busy && !busy
               ? Date.now()
@@ -472,7 +485,7 @@ export const useTerminalStore = create<TerminalState>()(
           return {
             paneStatuses: {
               ...s.paneStatuses,
-              [paneId]: { busy, command, completedAt },
+              [paneId]: { busy, command, awaitingInput, completedAt },
             },
           };
         });
@@ -550,7 +563,30 @@ export const useTerminalStore = create<TerminalState>()(
           ),
         })),
 
-      setActiveTab: (tabId) => set({ activeTabId: tabId }),
+      setActiveTab: (tabId) => {
+        set((s) => {
+          // 활성화 시 해당 탭의 모든 pane 의 completedAt 을 null 로 초기화
+          // → "방금 완료" 깜빡임이 사용자가 탭을 보는 순간 꺼짐 (dismiss 효과).
+          // awaitingInput 은 서버가 계속 true 로 보내면 유지됨.
+          const tab = s.tabs.find((t) => t.id === tabId);
+          if (!tab || tab.type === "browser" || tab.type === "file") {
+            return { activeTabId: tabId };
+          }
+          const panes = findAllPanes(tab.root);
+          const nextStatuses = { ...s.paneStatuses };
+          let changed = false;
+          for (const pane of panes) {
+            const st = nextStatuses[pane.id];
+            if (st && st.completedAt !== null) {
+              nextStatuses[pane.id] = { ...st, completedAt: null };
+              changed = true;
+            }
+          }
+          return changed
+            ? { activeTabId: tabId, paneStatuses: nextStatuses }
+            : { activeTabId: tabId };
+        });
+      },
 
       createBrowserTab: (url, tabName) => {
         const tabId = `browser-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

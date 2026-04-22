@@ -42,26 +42,53 @@ export function TerminalTabs() {
   const { data: projectsData } = useProjects();
   const activeProject = projectsData?.projects.find((p) => p.id === activeId);
 
-  // ⌘T 단축키와 + 버튼이 공유하는 picker open 상태
+  // ⌘T / ⌘⇧T / + 버튼이 공유하는 picker open 상태
   const pickerOpen = useNewTabPickerStore((s) => s.open);
   const setPickerOpen = useNewTabPickerStore((s) => s.setOpen);
+  const pickerMode = useNewTabPickerStore((s) => s.mode);
+  const splitRightmost = useTerminalStore((s) => s.splitRightmostInActiveTab);
 
   const handlePickerSelect = (cwd: string | null) => {
+    if (pickerMode === "split") {
+      // ⌘⇧T — 활성 탭의 오른쪽에 split. cwd 미지정 시 store 내부에서 활성 프로젝트 path 사용.
+      void splitRightmost(cwd ?? undefined);
+      return;
+    }
+    // ⌘T / + 버튼 — 새 탭
     if (cwd) void createTab({ cwd });
     else void createTab();
   };
 
-  // 터미널 탭의 실행 중 상태 — 속한 pane 중 하나라도 busy 면 busy
+  // 탭의 "주목 필요" 상태 — 다음 중 하나일 때 깜빡임:
+  //   (a) 어떤 pane 이 awaitingInput 상태 (Claude y/n 대기 등)
+  //   (b) 어떤 pane 이 최근 busy→idle 전환 (작업 완료 알림)
+  // 단순 busy (출력 활발하게 나오는 중) 는 깜빡이지 않음.
+  // completedAt 은 setActiveTab 에서 리셋되므로 "탭 보면 사라짐".
   const tabRunState = (tab: (typeof tabs)[number]) => {
     if (tab.type === "browser" || tab.type === "file") {
-      return { busy: false, command: null as string | null };
+      return {
+        attention: false,
+        reason: null as "awaiting" | "completed" | null,
+        command: null as string | null,
+      };
     }
     const panes = flattenPanes(tab.root);
     for (const p of panes) {
       const st = paneStatuses[p.id];
-      if (st?.busy) return { busy: true, command: st.command };
+      if (!st) continue;
+      if (st.awaitingInput) {
+        return { attention: true, reason: "awaiting", command: st.command };
+      }
     }
-    return { busy: false, command: null };
+    for (const p of panes) {
+      const st = paneStatuses[p.id];
+      if (!st) continue;
+      // busy → idle 전환 후 아직 dismiss 안 된 탭
+      if (!st.busy && st.completedAt !== null) {
+        return { attention: true, reason: "completed", command: st.command };
+      }
+    }
+    return { attention: false, reason: null, command: null };
   };
 
   return (
@@ -109,10 +136,12 @@ export function TerminalTabs() {
             tab.id === activeTabId
               ? "bg-[var(--color-background)] text-[var(--color-foreground)] border-b-2 border-b-[var(--color-accent)]"
               : "text-[var(--color-foreground-muted)]",
-            // 실행 중인 비활성 탭 — 이름을 accent 로 살짝 띄워 주의 유도
-            runState.busy &&
+            // 주목 필요한 비활성 탭 — 이름 색도 강조 (응답 대기 또는 방금 완료)
+            runState.attention &&
               tab.id !== activeTabId &&
-              "text-[var(--color-accent)]/90",
+              (runState.reason === "awaiting"
+                ? "text-[var(--color-accent)]/90"
+                : "text-[var(--color-success)]/90"),
             dragIndex === idx && "opacity-40",
             dragOverIndex === idx &&
               dragIndex !== idx &&
@@ -123,14 +152,23 @@ export function TerminalTabs() {
             <Globe size={12} className="flex-shrink-0 opacity-70" />
           ) : tab.type === "file" ? (
             <FileText size={12} className="flex-shrink-0 opacity-70" />
-          ) : runState.busy ? (
-            // 실행 중 — 깜빡이는 도트로 TerminalIcon 대체
+          ) : runState.attention ? (
+            // 주목 필요 (응답 대기 또는 방금 완료) — 깜빡이는 도트
             <span
-              className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-cockpit-blink flex-shrink-0 mx-[3px]"
+              className={cn(
+                "w-1.5 h-1.5 rounded-full flex-shrink-0 mx-[3px] animate-cockpit-blink",
+                runState.reason === "awaiting"
+                  ? "bg-[var(--color-accent)]"
+                  : "bg-[var(--color-success)]",
+              )}
               title={
-                runState.command
-                  ? `실행 중: ${runState.command}`
-                  : "실행 중"
+                runState.reason === "awaiting"
+                  ? runState.command
+                    ? `응답 대기 중: ${runState.command}`
+                    : "응답 대기 중"
+                  : runState.command
+                    ? `방금 완료: ${runState.command}`
+                    : "방금 완료"
               }
             />
           ) : (

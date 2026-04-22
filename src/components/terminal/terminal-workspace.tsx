@@ -21,7 +21,6 @@ export function TerminalWorkspace() {
   const createTab = useTerminalStore((s) => s.createTab);
   const closeTab = useTerminalStore((s) => s.closeTab);
   const syncWithServer = useTerminalStore((s) => s.syncWithServer);
-  const splitRightmost = useTerminalStore((s) => s.splitRightmostInActiveTab);
   const openNewTabPicker = useNewTabPickerStore((s) => s.openPicker);
   const router = useRouter();
 
@@ -48,36 +47,18 @@ export function TerminalWorkspace() {
 
   // 전역 단축키
   //  ⌘T        → 프로젝트 선택 picker 열기 (키보드 네비로 선택 후 엔터)
-  //  ⌘⇧T       → 활성 탭에 horizontal split + 활성 프로젝트 cwd
+  //  ⌘⇧T       → picker 열기 (split 모드) — 활성 탭 우측에 선택한 cwd 로 split
   //  ⌘W        → 활성 탭 닫기 (confirm 다이얼로그)
-  //  ⌘⇧←/→    → 이전/다음 탭 전환 (wrap around)
+  //  ⌘⇧←/→    → 같은 탭의 split 내 pane 포커스 이동 (wrap)
+  //  ⌘⌥←/→    → 이전/다음 탭 전환 (wrap)
   //  Enter     → 터미널 화면에서 xterm 밖 focus 일 때 첫 pane 에 focus
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // ── ⌘⇧←/→ 탭 전환 ──
+      // ── ⌘⇧←/→ split 내 pane 포커스 이동 (flat ordering, wrap) ──
       if (
         (e.metaKey || e.ctrlKey) &&
         e.shiftKey &&
         !e.altKey &&
-        (e.key === "ArrowLeft" || e.key === "ArrowRight")
-      ) {
-        const state = useTerminalStore.getState();
-        if (state.tabs.length <= 1) return;
-        e.preventDefault();
-        const idx = state.tabs.findIndex((t) => t.id === state.activeTabId);
-        if (idx < 0) return;
-        const delta = e.key === "ArrowLeft" ? -1 : 1;
-        const next =
-          (idx + delta + state.tabs.length) % state.tabs.length;
-        state.setActiveTab(state.tabs[next].id);
-        return;
-      }
-
-      // ── ⌘⌥←/→ split 내 pane 포커스 이동 (flat ordering, wrap) ──
-      if (
-        (e.metaKey || e.ctrlKey) &&
-        e.altKey &&
-        !e.shiftKey &&
         (e.key === "ArrowLeft" || e.key === "ArrowRight")
       ) {
         const state = useTerminalStore.getState();
@@ -108,6 +89,25 @@ export function TerminalWorkspace() {
             detail: { paneId: panes[next].id },
           }),
         );
+        return;
+      }
+
+      // ── ⌘⌥←/→ 탭 전환 ──
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.altKey &&
+        !e.shiftKey &&
+        (e.key === "ArrowLeft" || e.key === "ArrowRight")
+      ) {
+        const state = useTerminalStore.getState();
+        if (state.tabs.length <= 1) return;
+        e.preventDefault();
+        const idx = state.tabs.findIndex((t) => t.id === state.activeTabId);
+        if (idx < 0) return;
+        const delta = e.key === "ArrowLeft" ? -1 : 1;
+        const next =
+          (idx + delta + state.tabs.length) % state.tabs.length;
+        state.setActiveTab(state.tabs[next].id);
         return;
       }
 
@@ -155,11 +155,9 @@ export function TerminalWorkspace() {
         if (typeof window !== "undefined" && window.location.pathname !== "/terminal") {
           router.push("/terminal");
         }
-        if (e.shiftKey) {
-          void splitRightmost();
-        } else {
-          openNewTabPicker();
-        }
+        // ⌘T  → picker (new 모드, 새 탭)
+        // ⌘⇧T → picker (split 모드, 활성 탭에 split) — 위치 선택 가능
+        openNewTabPicker(e.shiftKey ? "split" : "new");
       } else if (
         (e.key === "w" || e.key === "W") &&
         activeTabId &&
@@ -176,7 +174,7 @@ export function TerminalWorkspace() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeTabId, createTab, closeTab, splitRightmost, openNewTabPicker, router]);
+  }, [activeTabId, createTab, closeTab, openNewTabPicker, router]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
 

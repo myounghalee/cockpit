@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { appendDailyEntry } from "@/lib/daily-log";
 
 interface Body {
   reason?: string;
@@ -26,6 +27,15 @@ export async function POST(
         status: "in_progress",
         completedAt: null,
       },
+      include: { project: { select: { name: true } } },
+    });
+    appendDailyEntry({
+      kind: "ticket.rework",
+      title: ticket.title,
+      projectName: ticket.project.name,
+      jiraKey: ticket.jiraKey,
+      reason: reason ?? null,
+      count: ticket.reworkCount,
     });
     return NextResponse.json(ticket);
   } catch {

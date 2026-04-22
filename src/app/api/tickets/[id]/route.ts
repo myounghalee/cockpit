@@ -4,6 +4,7 @@ import {
   getAutoTransitionDone,
   transitionIssueIfConfigured,
 } from "@/lib/jira";
+import { appendDailyEntry } from "@/lib/daily-log";
 
 interface PatchBody {
   title?: string;
@@ -42,7 +43,41 @@ export async function PATCH(
     } else if (body.status !== undefined && body.status !== "done") {
       data.completedAt = null;
     }
-    const updated = await prisma.ticket.update({ where: { id }, data });
+    const before =
+      body.status !== undefined
+        ? await prisma.ticket.findUnique({
+            where: { id },
+            select: { status: true },
+          })
+        : null;
+    const updated = await prisma.ticket.update({
+      where: { id },
+      data,
+      include: { project: { select: { name: true } } },
+    });
+
+    // daily.md 기록 — status 전환 시에만
+    if (body.status !== undefined && before?.status !== body.status) {
+      if (body.status === "done") {
+        appendDailyEntry({
+          kind: "ticket.done",
+          title: updated.title,
+          projectName: updated.project.name,
+          jiraKey: updated.jiraKey,
+          resultSummary:
+            (body.resultSummary as string | undefined) ?? updated.resultSummary,
+        });
+      } else {
+        appendDailyEntry({
+          kind: "ticket.status",
+          title: updated.title,
+          projectName: updated.project.name,
+          jiraKey: updated.jiraKey,
+          from: before?.status ?? null,
+          to: body.status,
+        });
+      }
+    }
 
     // 완료 상태 전환 + autoTransitionDone + jiraKey 있으면 Jira done 전환 (실패해도 티켓 진행)
     if (body.status === "done" && updated.jiraKey) {

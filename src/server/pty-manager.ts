@@ -10,6 +10,11 @@ import { RingBuffer } from "./ring-buffer";
 export interface PtyStatus {
   busy: boolean;
   command: string | null;
+  /**
+   * busy 상태인데 최근 N초 출력이 없어 사용자 응답을 기다리는 상태.
+   * busy=false 일 땐 항상 false.
+   */
+  awaitingInput: boolean;
 }
 
 export interface PtyRecord {
@@ -24,7 +29,12 @@ export interface PtyRecord {
   exited: boolean;
   /** 자식 프로세스 감지 기반 상태 (서버 폴링으로 업데이트) */
   status: PtyStatus;
+  /** pty.onData 가 마지막으로 발동한 시각 — awaitingInput 판정용 */
+  lastOutputAt: number;
 }
+
+/** busy + 출력 정지 지속 시간이 이 값을 넘으면 "응답 대기 중"으로 간주 */
+const AWAITING_THRESHOLD_MS = 3000;
 
 export interface CreatePtyOptions {
   cwd?: string;
@@ -186,16 +196,26 @@ export class PtyManager {
   private async pollStatuses(): Promise<void> {
     if (this.records.size === 0) return;
     const procMap = await queryProcessMap();
+    const now = Date.now();
     for (const [id, record] of this.records) {
       if (record.exited) continue;
       const children = procMap.get(record.pty.pid) ?? [];
       const busy = children.length > 0;
       const command = busy ? pickPrimaryCommand(children) : null;
+      // 응답 대기 중: 자식 프로세스는 돌고 있지만 출력이 N초 이상 없음
+      // (예: Claude "y/n" 대기, read 대기, 대화형 prompt)
+      const timeSinceOutput = now - record.lastOutputAt;
+      const awaitingInput = busy && timeSinceOutput > AWAITING_THRESHOLD_MS;
+
       const prev = record.status;
-      if (prev.busy !== busy || prev.command !== command) {
-        record.status = { busy, command };
+      if (
+        prev.busy !== busy ||
+        prev.command !== command ||
+        prev.awaitingInput !== awaitingInput
+      ) {
+        record.status = { busy, command, awaitingInput };
         for (const ws of record.subscribers) {
-          send(ws, { type: "status", busy, command });
+          send(ws, { type: "status", busy, command, awaitingInput });
         }
       }
     }
@@ -230,11 +250,13 @@ export class PtyManager {
       buffer: new RingBuffer(getBufferMaxBytes()),
       subscribers: new Set(),
       exited: false,
-      status: { busy: false, command: null },
+      status: { busy: false, command: null, awaitingInput: false },
+      lastOutputAt: Date.now(),
     };
 
     pty.onData((data) => {
       record.buffer.write(data);
+      record.lastOutputAt = Date.now();
       for (const ws of record.subscribers) {
         send(ws, { type: "output", data });
       }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { appendDailyEntry } from "@/lib/daily-log";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -72,6 +73,13 @@ export async function POST(request: Request) {
       content: body.content ?? "",
       tags: body.tags?.trim() ?? "",
     },
+    include: { project: { select: { name: true } } },
+  });
+  appendDailyEntry({
+    kind: "memo.created",
+    title: memo.title,
+    projectName: memo.project?.name ?? null,
+    tags: memo.tags,
   });
   return NextResponse.json(memo, { status: 201 });
 }

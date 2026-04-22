@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { appendDailyEntry } from "@/lib/daily-log";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -84,6 +85,14 @@ export async function POST(request: Request) {
       autoMode: body.autoMode ?? "manual",
       commitMode: body.commitMode ?? "none",
     },
+    include: { project: { select: { name: true } } },
+  });
+  appendDailyEntry({
+    kind: "ticket.created",
+    title: ticket.title,
+    projectName: ticket.project.name,
+    jiraKey: ticket.jiraKey,
+    type: ticket.type,
   });
   return NextResponse.json(ticket, { status: 201 });
 }

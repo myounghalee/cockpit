@@ -12,7 +12,12 @@ type ServerMessage =
   | { type: "exit"; code: number }
   | { type: "error"; message: string }
   | { type: "pong" }
-  | { type: "status"; busy: boolean; command: string | null };
+  | {
+      type: "status";
+      busy: boolean;
+      command: string | null;
+      awaitingInput: boolean;
+    };
 
 function send(ws: WebSocket, message: ServerMessage): void {
   if (ws.readyState === ws.OPEN) {
@@ -53,6 +58,7 @@ export function handlePtyConnection(
     type: "status",
     busy: record.status.busy,
     command: record.status.command,
+    awaitingInput: record.status.awaitingInput,
   });
 
   // 3. 클라 → pty 메시지 처리

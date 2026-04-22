@@ -114,12 +114,12 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
       } else if (msg.type === "exit") {
         term.writeln(`\r\n\x1b[33m[process exited with code ${msg.code}]\x1b[0m`);
         // 종료된 pty 는 busy 해제 (tab 상태 초기화)
-        setPaneStatus(pane.id, false, null);
+        setPaneStatus(pane.id, false, null, false);
       } else if (msg.type === "error") {
         term.writeln(`\r\n\x1b[31m[error: ${msg.message}]\x1b[0m`);
       } else if (msg.type === "status") {
         // 서버가 1초 주기로 자식 프로세스 감지 → 이 pane 의 실행 상태
-        setPaneStatus(pane.id, msg.busy, msg.command);
+        setPaneStatus(pane.id, msg.busy, msg.command, msg.awaitingInput);
       }
     });
     ws.connect();

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { appendDailyEntry } from "@/lib/daily-log";
 
 interface ConvertBody {
   projectId?: string;  // 메모가 전역이면 여기서 프로젝트 지정 필수
@@ -43,7 +44,7 @@ export async function POST(
   // project 존재 확인
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (!project) {
     return NextResponse.json({ error: "project not found" }, { status: 404 });
@@ -87,6 +88,13 @@ export async function POST(
   await prisma.memo.update({
     where: { id: memo.id },
     data: { convertedTicketId: ticket.id },
+  });
+
+  appendDailyEntry({
+    kind: "memo.converted",
+    title: memo.title,
+    projectName: project.name,
+    ticketId: ticket.id,
   });
 
   return NextResponse.json({ ticket, memoId: memo.id }, { status: 201 });

@@ -1,14 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BarChart3, Calendar as CalendarIcon } from "lucide-react";
+import { BarChart3, Calendar as CalendarIcon, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjects } from "@/hooks/use-projects";
 import { useActiveProjectStore } from "@/store/active-project-store";
 import { CalendarTab } from "@/components/insights/calendar-tab";
 import { StatsTab } from "@/components/insights/stats-tab";
+import { DailyTab } from "@/components/insights/daily-tab";
 
-type TabKey = "calendar" | "stats";
+type TabKey = "daily" | "calendar" | "stats";
 type RangeKey = "7d" | "30d" | "90d";
 
 const RANGES: Record<RangeKey, { label: string; days: number }> = {
@@ -23,7 +24,7 @@ export default function InsightsPage() {
   const activeId = useActiveProjectStore((s) => s.activeProjectId);
   const explicitlyUnset = useActiveProjectStore((s) => s.explicitlyUnset);
 
-  const [tab, setTab] = useState<TabKey>("calendar");
+  const [tab, setTab] = useState<TabKey>("daily");
   const [range, setRange] = useState<RangeKey>("30d");
   // 프로젝트 필터: null = 전체, string = 특정 ID
   // 초기값: 활성 프로젝트(해제 상태면 null)
@@ -48,6 +49,12 @@ export default function InsightsPage() {
 
         {/* 탭 */}
         <div className="flex items-center gap-0 rounded-md border border-[var(--color-border)] overflow-hidden ml-2">
+          <TabButton
+            active={tab === "daily"}
+            onClick={() => setTab("daily")}
+            icon={<FileText size={12} />}
+            label="Daily"
+          />
           <TabButton
             active={tab === "calendar"}
             onClick={() => setTab("calendar")}
@@ -84,25 +91,31 @@ export default function InsightsPage() {
           </div>
         )}
 
-        {/* 프로젝트 필터 */}
-        <select
-          value={projectFilter ?? "__all__"}
-          onChange={(e) =>
-            setProjectFilter(e.target.value === "__all__" ? null : e.target.value)
-          }
-          className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-        >
-          <option value="__all__">전체 프로젝트</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        {/* 프로젝트 필터 — Daily 탭에선 프로젝트 구분이 파일 안에 이미 들어있어 숨김 */}
+        {tab !== "daily" && (
+          <select
+            value={projectFilter ?? "__all__"}
+            onChange={(e) =>
+              setProjectFilter(
+                e.target.value === "__all__" ? null : e.target.value,
+              )
+            }
+            className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+          >
+            <option value="__all__">전체 프로젝트</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
       </header>
 
       {/* 본문 */}
-      {tab === "calendar" ? (
+      {tab === "daily" ? (
+        <DailyTab />
+      ) : tab === "calendar" ? (
         <CalendarTab projectId={projectFilter} />
       ) : (
         <StatsTab from={from} to={to} projectId={projectFilter} />

@@ -5,6 +5,7 @@ export interface Memo {
   content: string;
   tags: string;
   pinnedAt: string | null;
+  completedAt: string | null;
   archivedAt: string | null;
   convertedTicketId: string | null;
   createdAt: string;

@@ -42,6 +42,11 @@ export type DailyEvent =
       tags?: string;
     }
   | {
+      kind: "memo.completed";
+      title: string;
+      projectName?: string | null;
+    }
+  | {
       kind: "memo.archived";
       title: string;
       projectName?: string | null;
@@ -121,6 +126,8 @@ function formatLine(event: DailyEvent, time: string): string {
         : "";
       return `- \`${time}\` 📝 **메모**:${projectBadge(event.projectName)} ${event.title}${tags}`;
     }
+    case "memo.completed":
+      return `- \`${time}\` ✅ **완료** (todo):${projectBadge(event.projectName)} ${event.title}`;
     case "memo.archived":
       return `- \`${time}\` 🗄️ 메모 아카이브:${projectBadge(event.projectName)} ${event.title}`;
     case "memo.converted":

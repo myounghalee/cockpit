@@ -1,8 +1,9 @@
 "use client";
 
-import { Pin, Archive, FileText } from "lucide-react";
+import { Pin, Archive, FileText, Square, CheckSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Memo } from "@/types/memo";
+import { useUpdateMemo } from "@/hooks/use-memos";
 
 interface MemoListProps {
   memos: Memo[];
@@ -35,11 +36,13 @@ function MemoRow({
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
+  const update = useUpdateMemo();
   const tags = memo.tags
     .split(",")
     .map((t) => t.trim())
     .filter(Boolean);
   const preview = memo.content.slice(0, 60).replace(/\n+/g, " ");
+  const completed = Boolean(memo.completedAt);
   return (
     <button
       onClick={() => onSelect(memo.id)}
@@ -48,9 +51,35 @@ function MemoRow({
         selected
           ? "bg-[var(--color-accent)]/15"
           : "hover:bg-[var(--color-surface-hover)]",
+        completed && "opacity-60",
       )}
     >
       <div className="flex items-start gap-2">
+        <span
+          role="checkbox"
+          aria-checked={completed}
+          tabIndex={0}
+          title={completed ? "완료 취소" : "완료로 표시"}
+          onClick={(e) => {
+            e.stopPropagation();
+            update.mutate({ id: memo.id, completed: !completed });
+          }}
+          onKeyDown={(e) => {
+            if (e.key === " " || e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
+              update.mutate({ id: memo.id, completed: !completed });
+            }
+          }}
+          className={cn(
+            "mt-0.5 flex-shrink-0 cursor-pointer rounded hover:bg-[var(--color-surface-hover)] p-0.5 -m-0.5",
+            completed
+              ? "text-[var(--color-accent)]"
+              : "text-[var(--color-foreground-dim)]",
+          )}
+        >
+          {completed ? <CheckSquare size={14} /> : <Square size={14} />}
+        </span>
         {memo.pinnedAt && (
           <Pin
             size={12}
@@ -65,7 +94,12 @@ function MemoRow({
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2">
-            <span className="text-sm font-medium truncate text-[var(--color-foreground)]">
+            <span
+              className={cn(
+                "text-sm font-medium truncate text-[var(--color-foreground)]",
+                completed && "line-through text-[var(--color-foreground-muted)]",
+              )}
+            >
               {memo.title || "(제목 없음)"}
             </span>
           </div>

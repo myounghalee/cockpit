@@ -81,6 +81,7 @@ export function useUpdateMemo() {
       projectId?: string | null;
       pinned?: boolean;
       archived?: boolean;
+      completed?: boolean;
     }) =>
       api<Memo>(`/api/memos/${id}`, {
         method: "PATCH",
@@ -108,6 +109,9 @@ export function useUpdateMemo() {
                     }),
                     ...(patch.archived !== undefined && {
                       archivedAt: patch.archived ? new Date().toISOString() : null,
+                    }),
+                    ...(patch.completed !== undefined && {
+                      completedAt: patch.completed ? new Date().toISOString() : null,
                     }),
                   } as Memo)
                 : m,

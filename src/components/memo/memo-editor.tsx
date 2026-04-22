@@ -13,6 +13,8 @@ import {
   Pencil,
   TicketIcon,
   Check,
+  Square,
+  CheckSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -93,6 +95,9 @@ export function MemoEditor({
   const handleToggleArchive = () =>
     update.mutate({ id: memo.id, archived: !memo.archivedAt });
 
+  const handleToggleComplete = () =>
+    update.mutate({ id: memo.id, completed: !memo.completedAt });
+
   const handleDelete = () => {
     if (!confirm("이 메모를 영구적으로 삭제하시겠습니까?")) return;
     del.mutate(memo.id, { onSuccess: onDeleted });
@@ -117,6 +122,22 @@ export function MemoEditor({
             </span>
           )}
         </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleToggleComplete}
+          title={memo.completedAt ? "완료 취소" : "완료로 표시"}
+        >
+          {memo.completedAt ? (
+            <CheckSquare size={14} className="text-[var(--color-accent)]" />
+          ) : (
+            <Square size={14} />
+          )}
+          <span className="text-xs">
+            {memo.completedAt ? "완료됨" : "완료"}
+          </span>
+        </Button>
 
         <Button
           variant="ghost"
@@ -183,7 +204,11 @@ export function MemoEditor({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="제목"
-          className="h-auto border-0 bg-transparent px-0 text-xl font-semibold focus:ring-0"
+          className={cn(
+            "h-auto border-0 bg-transparent px-0 text-xl font-semibold focus:ring-0",
+            memo.completedAt &&
+              "line-through text-[var(--color-foreground-muted)]",
+          )}
         />
       </div>
 

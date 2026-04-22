@@ -9,6 +9,7 @@ interface PatchBody {
   projectId?: string | null;
   pinned?: boolean;     // true → pinnedAt=now, false → pinnedAt=null
   archived?: boolean;   // true → archivedAt=now, false → archivedAt=null
+  completed?: boolean;  // true → completedAt=now, false → completedAt=null
 }
 
 export async function PATCH(
@@ -34,20 +35,33 @@ export async function PATCH(
   if (body.archived !== undefined) {
     data.archivedAt = body.archived ? new Date() : null;
   }
+  if (body.completed !== undefined) {
+    data.completedAt = body.completed ? new Date() : null;
+  }
 
   try {
-    const before =
-      body.archived === true
-        ? await prisma.memo.findUnique({
-            where: { id },
-            select: { archivedAt: true },
-          })
-        : null;
+    // 전환 여부 판정을 위해 이전 값 한 번 조회 (archive/complete 둘 다 필요할 수 있음)
+    const needsBefore =
+      body.archived === true || body.completed === true;
+    const before = needsBefore
+      ? await prisma.memo.findUnique({
+          where: { id },
+          select: { archivedAt: true, completedAt: true },
+        })
+      : null;
     const updated = await prisma.memo.update({
       where: { id },
       data,
       include: { project: { select: { name: true } } },
     });
+    // complete 토글 true → completedAt이 새로 생긴 경우에만 기록
+    if (body.completed === true && before && before.completedAt === null) {
+      appendDailyEntry({
+        kind: "memo.completed",
+        title: updated.title,
+        projectName: updated.project?.name ?? null,
+      });
+    }
     // archive 토글 true → archivedAt이 새로 생긴 경우에만 기록
     if (body.archived === true && before && before.archivedAt === null) {
       appendDailyEntry({

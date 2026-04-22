@@ -33,9 +33,29 @@ model Project {
   updatedAt    DateTime       @updatedAt
   tickets      Ticket[]
   quickActions QuickAction[]
+  memos        Memo[]
 
   @@index([folderId, order])
   @@index([isFavorite])
+}
+
+// ToDo / Memo — 아이디어·할 일·버그 메모장. 성숙하면 Ticket으로 승격.
+// projectId가 null이면 전역 메모 (프로젝트에 매이지 않음).
+model Memo {
+  id           String    @id @default(cuid())
+  projectId    String?
+  project      Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title        String
+  content      String    @default("")   // markdown
+  tags         String    @default("")   // "아이디어,버그,개선" 콤마 구분
+  pinnedAt     DateTime?                // 상단 고정 시 타임스탬프
+  archivedAt   DateTime?                // 아카이브 시 타임스탬프
+  convertedTicketId String? @unique     // 티켓으로 변환되면 해당 ticket.id 기록
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([projectId, archivedAt])
+  @@index([pinnedAt])
 }
 
 // Git 빠른 액션(워크플로우). projectId가 null이면 전역 프리셋.

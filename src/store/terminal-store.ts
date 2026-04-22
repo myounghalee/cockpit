@@ -482,18 +482,24 @@ export const useTerminalStore = create<TerminalState>()(
       setPaneStatus: (paneId, busy, command, awaitingInput) => {
         set((s) => {
           const prev = s.paneStatuses[paneId];
-          // busy → idle 전환 = "방금 완료". 이 순간에만 알림을 띄움.
+          // busy → idle 전환 = "방금 완료"
           const justCompleted = !!prev?.busy && !busy;
+          // awaitingInput 처음 true 로 전환 = "응답 대기 시작"
+          const justStartedAwaiting =
+            !prev?.awaitingInput && awaitingInput;
           const completedAt = justCompleted
             ? Date.now()
             : busy
-              ? null // 다시 실행 시작하면 이전 완료 기록은 리셋
+              ? null
               : (prev?.completedAt ?? null);
-          // acknowledged 기본은 true (조용). 완료 이벤트가 새로 발생하면 false 로
-          // 내려 깜빡임이 재개됨 → 사용자가 탭을 클릭해 setActiveTab 이 true 로 돌려놓음.
-          const acknowledged = justCompleted
-            ? false
-            : (prev?.acknowledged ?? true);
+          // acknowledged 리셋 조건 (알림 재개):
+          //   (a) 방금 완료 → 깜빡임 시작
+          //   (b) 방금 응답 대기 진입 → 깜빡임 시작
+          // 그 외는 prev 유지 (같은 대기 상태에서 계속 true 로 받아도 조용)
+          const acknowledged =
+            justCompleted || justStartedAwaiting
+              ? false
+              : (prev?.acknowledged ?? true);
           return {
             paneStatuses: {
               ...s.paneStatuses,

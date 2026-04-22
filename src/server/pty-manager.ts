@@ -33,8 +33,36 @@ export interface PtyRecord {
   lastOutputAt: number;
 }
 
-/** busy + 출력 정지 지속 시간이 이 값을 넘으면 "응답 대기 중"으로 간주 */
-const AWAITING_THRESHOLD_MS = 3000;
+/**
+ * awaitingInput 판정 관련 상수.
+ *   MIN_IDLE_MS   — 이 시간 미만이면 "출력 활발"으로 간주하고 판정 스킵
+ *   HARD_IDLE_MS  — 이 시간 이상 출력 없으면 패턴 없어도 대기로 판정 (fallback)
+ *   PATTERN_SCAN_BYTES — 버퍼 끝 이만큼만 패턴 매칭 (터미널 리렌더로 뒤에 와야 의미)
+ */
+const MIN_IDLE_MS = 800;
+const HARD_IDLE_MS = 7000;
+const PATTERN_SCAN_BYTES = 4000;
+
+/**
+ * 버퍼 끝부분을 검사해 "사용자 응답을 기다리는 상태"인지 판정.
+ * Claude Code 의 선택지 박스, 일반 (y/n) 프롬프트, shell read 등을 커버.
+ */
+function looksLikeAwaitingInput(text: string): boolean {
+  // ANSI escape 시퀀스 제거 (curses/ANSI 스타일이 패턴 깨는 걸 방지)
+  const clean = text.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
+  return (
+    // Claude Code 선택지 UI
+    /\n\s*(?:❯|>)\s*\d+\.\s+/.test(clean) ||
+    /\bEsc to cancel\b/.test(clean) ||
+    /Do you want to (?:proceed|continue)/i.test(clean) ||
+    // 일반 CLI 프롬프트
+    /\((?:y\/n|Y\/n|y\/N|yes\/no)\)/i.test(clean) ||
+    /\[(?:Y\/n|y\/N)\]/i.test(clean) ||
+    /Continue\?/i.test(clean) ||
+    // 선택지 리스트 (Press 1/2/3 등)
+    /\bPress\s+\w+\s+to\b/i.test(clean)
+  );
+}
 
 export interface CreatePtyOptions {
   cwd?: string;
@@ -202,10 +230,20 @@ export class PtyManager {
       const children = procMap.get(record.pty.pid) ?? [];
       const busy = children.length > 0;
       const command = busy ? pickPrimaryCommand(children) : null;
-      // 응답 대기 중: 자식 프로세스는 돌고 있지만 출력이 N초 이상 없음
-      // (예: Claude "y/n" 대기, read 대기, 대화형 prompt)
-      const timeSinceOutput = now - record.lastOutputAt;
-      const awaitingInput = busy && timeSinceOutput > AWAITING_THRESHOLD_MS;
+
+      // awaitingInput 판정:
+      //   - 출력이 충분히 멎었고 (활발히 출력 중이면 아직 생각/처리 중)
+      //   - busy 상태이며
+      //   - 버퍼 끝에 입력 대기 패턴이 있거나, 7초+ 조용 (fallback)
+      let awaitingInput = false;
+      if (busy) {
+        const idleMs = now - record.lastOutputAt;
+        if (idleMs >= MIN_IDLE_MS) {
+          const tail = record.buffer.snapshot().slice(-PATTERN_SCAN_BYTES);
+          awaitingInput =
+            looksLikeAwaitingInput(tail) || idleMs >= HARD_IDLE_MS;
+        }
+      }
 
       const prev = record.status;
       if (

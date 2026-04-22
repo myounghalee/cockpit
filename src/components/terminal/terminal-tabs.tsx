@@ -59,11 +59,11 @@ export function TerminalTabs() {
     else void createTab();
   };
 
-  // 탭의 "완료 알림" 상태 — 아래 조건 모두 만족 시 깜빡임:
-  //   - pane 이 방금 busy → idle 전환 (completedAt 존재)
-  //   - 현재 busy 아님
-  //   - 사용자가 아직 탭을 보지 않음 (acknowledged === false)
-  // 단순 실행 중 / 응답 대기 중은 깜빡이지 않음 — 사용자 요청에 따라 완료만 알림.
+  // 탭의 "주목 알림" 상태 — 다음 중 하나가 true && acknowledged=false 면 깜빡임:
+  //   (a) 방금 busy→idle 전환 (completedAt 존재 && !busy)   "명령 완료"
+  //   (b) awaitingInput 상태 (busy && 서버가 입력 대기 감지) "Claude 응답 대기"
+  // acknowledged=true 면 깜빡임 중지 (탭 클릭 시 자동 true).
+  // 같은 awaitingInput 상태가 계속 와도 재트리거 안 함 (justStartedAwaiting 에서만 리셋).
   const tabRunState = (tab: (typeof tabs)[number]) => {
     if (tab.type === "browser" || tab.type === "file") {
       return { attention: false, command: null as string | null };
@@ -71,8 +71,13 @@ export function TerminalTabs() {
     const panes = flattenPanes(tab.root);
     for (const p of panes) {
       const st = paneStatuses[p.id];
-      if (!st) continue;
-      if (!st.busy && st.completedAt !== null && !st.acknowledged) {
+      if (!st || st.acknowledged) continue;
+      // (b) 응답 대기
+      if (st.busy && st.awaitingInput) {
+        return { attention: true, command: st.command };
+      }
+      // (a) 방금 완료
+      if (!st.busy && st.completedAt !== null) {
         return { attention: true, command: st.command };
       }
     }

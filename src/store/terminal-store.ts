@@ -16,10 +16,20 @@ import { useActiveProjectStore } from "./active-project-store";
  * - 앱 마운트 시 syncWithServer()로 서버 pty 목록과 대조하여 stale한 pane/탭을 정리.
  */
 
+export interface PaneStatus {
+  busy: boolean;
+  command: string | null;
+  /** busy → idle 전환 시점 (ms). idle 유지 중이면 null */
+  completedAt: number | null;
+}
+
 interface TerminalState {
   tabs: TerminalTab[];
   activeTabId: string | null;
   hydrated: boolean; // persist 복원 완료 플래그
+  /** 각 terminal pane 의 현재 실행 상태 (서버 폴링 기반). persist 안 됨. */
+  paneStatuses: Record<string, PaneStatus>;
+  setPaneStatus: (paneId: string, busy: boolean, command: string | null) => void;
   /** 파일 뷰어에서 성공적으로 열었던 최근 경로들 (최신 먼저, 최대 10개) */
   recentFiles: string[];
   /** 브라우저에서 방문했던 최근 URL들 (최신 먼저, 최대 10개) */
@@ -441,12 +451,32 @@ export const useTerminalStore = create<TerminalState>()(
       tabs: [],
       activeTabId: null,
       hydrated: false,
+      paneStatuses: {},
       recentFiles: [],
       recentUrls: [],
       terminalFontSize: 13,
       markdownFontSize: 14,
       preferredEditor: "vscode",
       customEditorCommand: "",
+
+      setPaneStatus: (paneId, busy, command) => {
+        set((s) => {
+          const prev = s.paneStatuses[paneId];
+          // busy → idle 전환 시점 기록 (UI 가 "방금 완료" 페이드 처리 가능)
+          const completedAt =
+            prev?.busy && !busy
+              ? Date.now()
+              : busy
+                ? null
+                : (prev?.completedAt ?? null);
+          return {
+            paneStatuses: {
+              ...s.paneStatuses,
+              [paneId]: { busy, command, completedAt },
+            },
+          };
+        });
+      },
 
       createTab: async (opts) => {
         const res = await createPty(opts);

@@ -11,7 +11,8 @@ type ServerMessage =
   | { type: "output"; data: string }
   | { type: "exit"; code: number }
   | { type: "error"; message: string }
-  | { type: "pong" };
+  | { type: "pong" }
+  | { type: "status"; busy: boolean; command: string | null };
 
 function send(ws: WebSocket, message: ServerMessage): void {
   if (ws.readyState === ws.OPEN) {
@@ -46,6 +47,13 @@ export function handlePtyConnection(
 
   // 2. 구독 등록 (브로드캐스트는 PtyManager가 담당)
   manager.addSubscriber(terminalId, ws);
+
+  // 2.1. 현재 status 즉시 전송 — 탭 재오픈/재연결 시에도 UI 에 올바른 상태
+  send(ws, {
+    type: "status",
+    busy: record.status.busy,
+    command: record.status.command,
+  });
 
   // 3. 클라 → pty 메시지 처리
   ws.on("message", (raw) => {

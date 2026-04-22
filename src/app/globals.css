@@ -225,3 +225,19 @@ code {
 .markdown-body input[type="checkbox"] {
   margin-right: 0.4em;
 }
+
+/* ─── 터미널 탭 실행중 표시 (깜빡임) ─── */
+@keyframes cockpit-blink {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+}
+.animate-cockpit-blink {
+  animation: cockpit-blink 1.1s ease-in-out infinite;
+}

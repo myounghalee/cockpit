@@ -13,4 +13,12 @@ export type ServerMessage =
   | { type: "output"; data: string }
   | { type: "exit"; code: number }
   | { type: "error"; message: string }
-  | { type: "pong" };
+  | { type: "pong" }
+  /**
+   * PTY foreground 자식 프로세스 상태 요약.
+   * server 가 1초 polling 으로 변화 감지 시 broadcast.
+   * busy=true  → shell 자식(claude, node, vim...) 이 실행 중
+   * busy=false → shell 만 있음 (사용자 입력 대기)
+   * command    → busy 때 자식의 comm (예: "claude", "node"). idle 시 null.
+   */
+  | { type: "status"; busy: boolean; command: string | null };

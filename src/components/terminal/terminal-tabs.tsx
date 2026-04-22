@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useTerminalStore } from "@/store/terminal-store";
+import { useTerminalStore, flattenPanes } from "@/store/terminal-store";
 import { useActiveProjectStore } from "@/store/active-project-store";
 import { useNewTabPickerStore } from "@/store/new-tab-picker-store";
 import { useProjects } from "@/hooks/use-projects";
@@ -32,6 +32,7 @@ export function TerminalTabs() {
   const duplicateTab = useTerminalStore((s) => s.duplicateTab);
   const renameTab = useTerminalStore((s) => s.renameTab);
   const reorderTabs = useTerminalStore((s) => s.reorderTabs);
+  const paneStatuses = useTerminalStore((s) => s.paneStatuses);
 
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -50,9 +51,24 @@ export function TerminalTabs() {
     else void createTab();
   };
 
+  // 터미널 탭의 실행 중 상태 — 속한 pane 중 하나라도 busy 면 busy
+  const tabRunState = (tab: (typeof tabs)[number]) => {
+    if (tab.type === "browser" || tab.type === "file") {
+      return { busy: false, command: null as string | null };
+    }
+    const panes = flattenPanes(tab.root);
+    for (const p of panes) {
+      const st = paneStatuses[p.id];
+      if (st?.busy) return { busy: true, command: st.command };
+    }
+    return { busy: false, command: null };
+  };
+
   return (
     <div className="flex items-center h-9 bg-[var(--color-surface)] border-b border-[var(--color-border)] px-1 overflow-x-auto flex-shrink-0">
-      {tabs.map((tab, idx) => (
+      {tabs.map((tab, idx) => {
+        const runState = tabRunState(tab);
+        return (
         <div
           key={tab.id}
           draggable
@@ -93,6 +109,10 @@ export function TerminalTabs() {
             tab.id === activeTabId
               ? "bg-[var(--color-background)] text-[var(--color-foreground)] border-b-2 border-b-[var(--color-accent)]"
               : "text-[var(--color-foreground-muted)]",
+            // 실행 중인 비활성 탭 — 이름을 accent 로 살짝 띄워 주의 유도
+            runState.busy &&
+              tab.id !== activeTabId &&
+              "text-[var(--color-accent)]/90",
             dragIndex === idx && "opacity-40",
             dragOverIndex === idx &&
               dragIndex !== idx &&
@@ -103,6 +123,16 @@ export function TerminalTabs() {
             <Globe size={12} className="flex-shrink-0 opacity-70" />
           ) : tab.type === "file" ? (
             <FileText size={12} className="flex-shrink-0 opacity-70" />
+          ) : runState.busy ? (
+            // 실행 중 — 깜빡이는 도트로 TerminalIcon 대체
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)] animate-cockpit-blink flex-shrink-0 mx-[3px]"
+              title={
+                runState.command
+                  ? `실행 중: ${runState.command}`
+                  : "실행 중"
+              }
+            />
           ) : (
             <TerminalIcon size={12} className="flex-shrink-0 opacity-70" />
           )}
@@ -158,7 +188,8 @@ export function TerminalTabs() {
             <X size={12} />
           </button>
         </div>
-      ))}
+        );
+      })}
       <ProjectPathPicker
         open={pickerOpen}
         onOpenChange={setPickerOpen}

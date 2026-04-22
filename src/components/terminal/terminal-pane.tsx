@@ -59,6 +59,7 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
   const splitPane = useTerminalStore((s) => s.splitPane);
   const closePane = useTerminalStore((s) => s.closePane);
   const fontSize = useTerminalStore((s) => s.terminalFontSize);
+  const setPaneStatus = useTerminalStore((s) => s.setPaneStatus);
   const dnd = usePaneDnd(pane.id);
 
   // 생성 시점에만 초기값을 쓰도록 ref로 분리 — 변경은 별도 effect에서 동적으로 반영
@@ -112,8 +113,13 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
         }
       } else if (msg.type === "exit") {
         term.writeln(`\r\n\x1b[33m[process exited with code ${msg.code}]\x1b[0m`);
+        // 종료된 pty 는 busy 해제 (tab 상태 초기화)
+        setPaneStatus(pane.id, false, null);
       } else if (msg.type === "error") {
         term.writeln(`\r\n\x1b[31m[error: ${msg.message}]\x1b[0m`);
+      } else if (msg.type === "status") {
+        // 서버가 1초 주기로 자식 프로세스 감지 → 이 pane 의 실행 상태
+        setPaneStatus(pane.id, msg.busy, msg.command);
       }
     });
     ws.connect();

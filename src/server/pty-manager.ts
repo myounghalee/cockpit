@@ -1,10 +1,16 @@
 import { spawn, type IPty } from "node-pty";
+import { execFile } from "child_process";
 import { randomUUID } from "crypto";
 import os from "os";
 import path from "path";
 import fs from "fs";
 import type { WebSocket } from "ws";
 import { RingBuffer } from "./ring-buffer";
+
+export interface PtyStatus {
+  busy: boolean;
+  command: string | null;
+}
 
 export interface PtyRecord {
   id: string;
@@ -16,6 +22,8 @@ export interface PtyRecord {
   subscribers: Set<WebSocket>;
   idleTimer?: NodeJS.Timeout;
   exited: boolean;
+  /** 자식 프로세스 감지 기반 상태 (서버 폴링으로 업데이트) */
+  status: PtyStatus;
 }
 
 export interface CreatePtyOptions {
@@ -116,8 +124,82 @@ function send(ws: WebSocket, message: unknown): void {
   }
 }
 
+/**
+ * 시스템의 전체 프로세스 목록에서 ppid → [comm, ...] 맵 한 번에 조회.
+ * 여러 PTY가 있어도 ps 를 1회만 실행하도록 공통화.
+ * macOS/Linux 호환 (`ps -ax -o pid=,ppid=,comm=`).
+ */
+function queryProcessMap(): Promise<Map<number, string[]>> {
+  return new Promise((resolve) => {
+    execFile(
+      "ps",
+      ["-ax", "-o", "pid=,ppid=,comm="],
+      { timeout: 2000, maxBuffer: 2 * 1024 * 1024 },
+      (err, stdout) => {
+        if (err) {
+          resolve(new Map());
+          return;
+        }
+        const map = new Map<number, string[]>();
+        for (const line of stdout.split("\n")) {
+          const m = line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/);
+          if (!m) continue;
+          const ppid = Number(m[2]);
+          const commFull = m[3].trim();
+          // 실행 경로의 마지막 이름만 (예: "/usr/bin/node" → "node")
+          const comm = commFull.split(/[/\\]/).pop() ?? commFull;
+          const arr = map.get(ppid) ?? [];
+          arr.push(comm);
+          map.set(ppid, arr);
+        }
+        resolve(map);
+      },
+    );
+  });
+}
+
+/** 자식 comm 배열에서 가장 의미 있는 하나 선택 (shell 자신은 제외) */
+function pickPrimaryCommand(comms: string[]): string | null {
+  if (comms.length === 0) return null;
+  const nonShell = comms.find(
+    (c) => !/^-?(zsh|bash|sh|fish|dash)$/i.test(c.replace(/^-/, "")),
+  );
+  return nonShell ?? comms[0];
+}
+
 export class PtyManager {
   private records = new Map<string, PtyRecord>();
+  private statusPollTimer?: NodeJS.Timeout;
+
+  constructor() {
+    // 1초마다 모든 PTY 의 자식 프로세스 상태 폴링.
+    // ps 를 한 번만 돌려 프로세스 맵 구성 → 각 PTY 가 자기 pid 로 lookup.
+    this.statusPollTimer = setInterval(() => {
+      void this.pollStatuses();
+    }, 1000);
+    // Node 가 이 interval 때문에 종료 못 하는 일 방지
+    if (typeof this.statusPollTimer.unref === "function") {
+      this.statusPollTimer.unref();
+    }
+  }
+
+  private async pollStatuses(): Promise<void> {
+    if (this.records.size === 0) return;
+    const procMap = await queryProcessMap();
+    for (const [id, record] of this.records) {
+      if (record.exited) continue;
+      const children = procMap.get(record.pty.pid) ?? [];
+      const busy = children.length > 0;
+      const command = busy ? pickPrimaryCommand(children) : null;
+      const prev = record.status;
+      if (prev.busy !== busy || prev.command !== command) {
+        record.status = { busy, command };
+        for (const ws of record.subscribers) {
+          send(ws, { type: "status", busy, command });
+        }
+      }
+    }
+  }
 
   create(options: CreatePtyOptions = {}): PtyRecord {
     const id = randomUUID();
@@ -148,6 +230,7 @@ export class PtyManager {
       buffer: new RingBuffer(getBufferMaxBytes()),
       subscribers: new Set(),
       exited: false,
+      status: { busy: false, command: null },
     };
 
     pty.onData((data) => {
@@ -248,6 +331,10 @@ export class PtyManager {
   disposeAll(): void {
     for (const id of Array.from(this.records.keys())) {
       this.dispose(id);
+    }
+    if (this.statusPollTimer) {
+      clearInterval(this.statusPollTimer);
+      this.statusPollTimer = undefined;
     }
   }
 }

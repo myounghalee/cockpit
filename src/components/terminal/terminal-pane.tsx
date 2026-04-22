@@ -1,0 +1,280 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import "@xterm/xterm/css/xterm.css";
+import { PtyWsClient } from "@/lib/ws-client";
+import {
+  SplitSquareHorizontal,
+  SplitSquareVertical,
+  X,
+  Globe,
+  FileText,
+} from "lucide-react";
+import { useTerminalStore } from "@/store/terminal-store";
+import type { TerminalPane as TerminalPaneType } from "@/types/terminal";
+import { ProjectPathPicker } from "@/components/projects/project-path-picker";
+import { usePaneDnd } from "./use-pane-dnd";
+import { cn } from "@/lib/utils";
+
+// xterm 다크 테마 — globals.css 변수와 맞춤
+const XTERM_THEME = {
+  background: "#0b0d12",
+  foreground: "#e6e8ee",
+  cursor: "#4f8cff",
+  cursorAccent: "#0b0d12",
+  selectionBackground: "#4f8cff55",
+  black: "#0b0d12",
+  red: "#ef4444",
+  green: "#22c55e",
+  yellow: "#f59e0b",
+  blue: "#4f8cff",
+  magenta: "#c084fc",
+  cyan: "#22d3ee",
+  white: "#e6e8ee",
+  brightBlack: "#6a7287",
+  brightRed: "#f87171",
+  brightGreen: "#4ade80",
+  brightYellow: "#fbbf24",
+  brightBlue: "#6aa0ff",
+  brightMagenta: "#d8b4fe",
+  brightCyan: "#67e8f9",
+  brightWhite: "#f5f7fa",
+} as const;
+
+interface TerminalPaneProps {
+  pane: TerminalPaneType;
+  isActive: boolean;
+  onFocus: () => void;
+}
+
+export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
+  const wsRef = useRef<PtyWsClient | null>(null);
+
+  const splitPane = useTerminalStore((s) => s.splitPane);
+  const closePane = useTerminalStore((s) => s.closePane);
+  const fontSize = useTerminalStore((s) => s.terminalFontSize);
+  const dnd = usePaneDnd(pane.id);
+
+  // 생성 시점에만 초기값을 쓰도록 ref로 분리 — 변경은 별도 effect에서 동적으로 반영
+  const fontSizeRef = useRef(fontSize);
+  fontSizeRef.current = fontSize;
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const term = new Terminal({
+      theme: XTERM_THEME,
+      fontFamily: '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace',
+      fontSize: fontSizeRef.current,
+      lineHeight: 1.2,
+      cursorBlink: true,
+      cursorStyle: "bar",
+      scrollback: 5000,
+      allowProposedApi: true,
+      macOptionIsMeta: true,
+    });
+
+    const fit = new FitAddon();
+    const webLinks = new WebLinksAddon();
+    term.loadAddon(fit);
+    term.loadAddon(webLinks);
+
+    term.open(containerRef.current);
+    fit.fit();
+
+    const ws = new PtyWsClient(pane.id);
+    // 이 이펙트 내에서만 true → 신규 연결 시 한 번만 initialInput 주입
+    let initialInputSent = false;
+    const unsubscribe = ws.onMessage((msg) => {
+      if (msg.type === "history") {
+        // 재연결 시 서버가 축적해둔 출력 스냅샷. 한 번에 써도 xterm이 버퍼링 처리.
+        term.write(msg.data);
+        // history가 존재한다는 건 이미 pty에서 뭔가 실행됐다는 뜻 → initialInput 주입하지 않음
+        initialInputSent = true;
+      } else if (msg.type === "output") {
+        term.write(msg.data);
+        // 첫 output(새 pty의 welcome/prompt)을 받은 시점에 initialInput 주입
+        if (!initialInputSent) {
+          initialInputSent = true;
+          const input = useTerminalStore.getState().consumeInitialInput(pane.id);
+          if (input) {
+            // Claude Code 부트 타이밍 여유: 추가 200ms 지연
+            setTimeout(() => {
+              ws.send({ type: "input", data: input });
+            }, 200);
+          }
+        }
+      } else if (msg.type === "exit") {
+        term.writeln(`\r\n\x1b[33m[process exited with code ${msg.code}]\x1b[0m`);
+      } else if (msg.type === "error") {
+        term.writeln(`\r\n\x1b[31m[error: ${msg.message}]\x1b[0m`);
+      }
+    });
+    ws.connect();
+
+    // Shift+Enter → 줄바꿈 전송 (Claude CLI 멀티라인 입력용)
+    // 한글 IME 조합 중(isComposing)에는 무시하여 이중 입력 방지
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.isComposing) return true;
+      if (e.key === "Enter" && e.shiftKey) {
+        if (e.type === "keydown") {
+          ws.send({ type: "input", data: "\n" });
+        }
+        return false;
+      }
+      return true;
+    });
+
+    const onData = term.onData((data) => {
+      ws.send({ type: "input", data });
+    });
+
+    // 초기 사이즈 전송
+    const sendResize = () => {
+      fit.fit();
+      const { cols, rows } = term;
+      ws.send({ type: "resize", cols, rows });
+    };
+    // xterm이 DOM에 attach된 직후 한 번
+    requestAnimationFrame(sendResize);
+
+    const resizeObserver = new ResizeObserver(() => {
+      sendResize();
+    });
+    resizeObserver.observe(containerRef.current);
+
+    termRef.current = term;
+    fitRef.current = fit;
+    wsRef.current = ws;
+
+    return () => {
+      resizeObserver.disconnect();
+      onData.dispose();
+      unsubscribe();
+      ws.close();
+      term.dispose();
+      termRef.current = null;
+      fitRef.current = null;
+      wsRef.current = null;
+    };
+  }, [pane.id]);
+
+  useEffect(() => {
+    if (isActive && termRef.current) {
+      termRef.current.focus();
+    }
+  }, [isActive]);
+
+  // 설정에서 폰트 크기 바뀌면 실시간 반영 + fit으로 열/행 재계산
+  useEffect(() => {
+    const term = termRef.current;
+    const fit = fitRef.current;
+    if (!term) return;
+    term.options.fontSize = fontSize;
+    fit?.fit();
+  }, [fontSize]);
+
+  return (
+    <div
+      className={cn(
+        "relative flex flex-col h-full min-h-0 bg-[var(--color-background)] border border-transparent group",
+        dnd.isDragOver && "border-[var(--color-accent)]",
+      )}
+      onMouseDown={onFocus}
+      onClick={onFocus}
+      {...dnd.rootProps}
+    >
+      {/* 패인 헤더 */}
+      <div
+        {...dnd.handleProps}
+        className="flex items-center justify-between h-7 px-2 bg-[var(--color-surface)] border-b border-[var(--color-border)] text-xs text-[var(--color-foreground-muted)] cursor-grab active:cursor-grabbing"
+      >
+        <span className="truncate">{pane.title}</span>
+        <div
+          className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ProjectPathPicker
+            onSelect={(cwd) =>
+              splitPane(pane.id, "horizontal", cwd ? { cwd } : undefined)
+            }
+            defaultLabel="기본 (현재 패널 cwd)"
+            defaultDescription={pane.cwd}
+            align="end"
+            side="bottom"
+            trigger={
+              <button
+                className="p-1 rounded hover:bg-[var(--color-surface-hover)]"
+                title="오른쪽으로 분할 (클릭으로 프로젝트 선택)"
+                aria-label="오른쪽으로 분할"
+              >
+                <SplitSquareHorizontal size={12} />
+              </button>
+            }
+          />
+          <ProjectPathPicker
+            onSelect={(cwd) =>
+              splitPane(pane.id, "vertical", cwd ? { cwd } : undefined)
+            }
+            defaultLabel="기본 (현재 패널 cwd)"
+            defaultDescription={pane.cwd}
+            align="end"
+            side="bottom"
+            trigger={
+              <button
+                className="p-1 rounded hover:bg-[var(--color-surface-hover)]"
+                title="아래로 분할 (클릭으로 프로젝트 선택)"
+                aria-label="아래로 분할"
+              >
+                <SplitSquareVertical size={12} />
+              </button>
+            }
+          />
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              splitPane(pane.id, "horizontal", { type: "browser" });
+            }}
+            className="p-1 rounded hover:bg-[var(--color-surface-hover)]"
+            title="오른쪽에 브라우저 분할"
+            aria-label="오른쪽에 브라우저 분할"
+          >
+            <Globe size={12} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              splitPane(pane.id, "horizontal", { type: "file" });
+            }}
+            className="p-1 rounded hover:bg-[var(--color-surface-hover)]"
+            title="오른쪽에 파일 뷰어 분할"
+            aria-label="오른쪽에 파일 뷰어 분할"
+          >
+            <FileText size={12} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              closePane(pane.id);
+            }}
+            className="p-1 rounded hover:bg-[var(--color-danger)]/20 hover:text-[var(--color-danger)]"
+            title="패인 닫기"
+            aria-label="패인 닫기"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      </div>
+
+      {/* xterm 컨테이너 */}
+      <div ref={containerRef} className="flex-1 min-h-0 overflow-hidden" />
+    </div>
+  );
+}

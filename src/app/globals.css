@@ -1,0 +1,227 @@
+@import "tailwindcss";
+
+/* ─── 다크 테마 (기본) ─── */
+@theme {
+  --color-background: #0b0d12;
+  --color-surface: #121621;
+  --color-surface-hover: #1a1f2e;
+  --color-border: #252b3a;
+  --color-border-strong: #2f3649;
+  --color-foreground: #e6e8ee;
+  --color-foreground-muted: #9ba3b4;
+  --color-foreground-dim: #6a7287;
+  --color-accent: #4f8cff;
+  --color-accent-hover: #6aa0ff;
+  --color-danger: #ef4444;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+
+  --radius-sm: 0.25rem;
+  --radius: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, Consolas,
+    monospace;
+}
+
+/* ─── 라이트 테마 ─── */
+[data-theme="light"] {
+  --color-background: #f8f9fb;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f0f1f4;
+  --color-border: #e0e3e8;
+  --color-border-strong: #cdd1d9;
+  --color-foreground: #1a1d24;
+  --color-foreground-muted: #5c6370;
+  --color-foreground-dim: #9ca3af;
+  --color-accent: #2563eb;
+  --color-accent-hover: #3b82f6;
+  --color-danger: #dc2626;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+}
+
+/* ─── 시스템 모드: 라이트일 때만 오버라이드 ─── */
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] {
+    --color-background: #f8f9fb;
+    --color-surface: #ffffff;
+    --color-surface-hover: #f0f1f4;
+    --color-border: #e0e3e8;
+    --color-border-strong: #cdd1d9;
+    --color-foreground: #1a1d24;
+    --color-foreground-muted: #5c6370;
+    --color-foreground-dim: #9ca3af;
+    --color-accent: #2563eb;
+    --color-accent-hover: #3b82f6;
+    --color-danger: #dc2626;
+    --color-success: #16a34a;
+    --color-warning: #d97706;
+  }
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  overflow: hidden;
+  /* 전역: UI 요소 드래그/더블클릭 시 원치 않는 선택 방지 */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* 내용물은 선택 가능해야 함 — input/textarea, 터미널, 마크다운, 파일 뷰어, diff 등 */
+input,
+textarea,
+[contenteditable="true"],
+.xterm,
+.markdown-body,
+.select-text,
+pre,
+code {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* xterm.js 기본 스타일 보정 */
+.xterm {
+  padding: 8px;
+  height: 100%;
+  width: 100%;
+}
+
+.xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+}
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 4px;
+}
+.xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 전역 스크롤바 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-foreground-dim);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ─── 마크다운 뷰어 ─── */
+.markdown-body {
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  line-height: 1.25;
+}
+.markdown-body h1 {
+  font-size: 1.6em;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.3em;
+}
+.markdown-body h2 {
+  font-size: 1.3em;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.2em;
+}
+.markdown-body h3 { font-size: 1.15em; }
+.markdown-body h4 { font-size: 1.05em; }
+.markdown-body p {
+  margin: 0.8em 0;
+}
+.markdown-body a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+.markdown-body code {
+  background: var(--color-surface);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: var(--font-mono);
+}
+.markdown-body pre {
+  background: var(--color-surface);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.5em;
+  margin: 0.8em 0;
+}
+.markdown-body li {
+  margin: 0.3em 0;
+}
+.markdown-body blockquote {
+  border-left: 3px solid var(--color-border-strong);
+  padding: 0.3em 1em;
+  margin: 1em 0;
+  color: var(--color-foreground-muted);
+}
+.markdown-body table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  width: max-content;
+  max-width: 100%;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--color-border);
+  padding: 6px 12px;
+}
+.markdown-body th {
+  background: var(--color-surface);
+  font-weight: 600;
+}
+.markdown-body img {
+  max-width: 100%;
+}
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1.5em 0;
+}
+.markdown-body input[type="checkbox"] {
+  margin-right: 0.4em;
+}

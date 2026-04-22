@@ -1,0 +1,44 @@
+# deps
+node_modules
+.pnp
+.pnp.js
+
+# next
+.next
+out
+
+# prisma
+prisma/dev.db*
+*.db
+*.db-journal
+
+# env — .env는 안전한 기본값만 (committed), 비밀/개인값은 .env.local에
+.env.local
+.env*.local
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# misc
+.DS_Store
+*.pem
+
+# testing
+coverage
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# cockpit runtime
+.cockpit.pid
+.cockpit-check*.pid
+logs/
+
+# electron
+dist-electron/
+dist-app/
+dist-app.noindex/

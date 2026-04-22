@@ -1,0 +1,87 @@
+// Cockpit - Cycle 2 스키마
+// 프로젝트를 1급 엔티티로 승격. 폴더(그룹)·즐겨찾기 추가.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ProjectFolder {
+  id        String    @id @default(cuid())
+  name      String
+  order     Int       @default(0)
+  collapsed Boolean   @default(false) // UI 접힘 상태 서버 저장 (sync across devices 대비)
+  createdAt DateTime  @default(now())
+  projects  Project[]
+
+  @@index([order])
+}
+
+model Project {
+  id           String         @id @default(cuid())
+  name         String
+  path         String         @unique
+  folderId     String?
+  folder       ProjectFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  isFavorite   Boolean        @default(false)
+  order        Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  tickets      Ticket[]
+  quickActions QuickAction[]
+
+  @@index([folderId, order])
+  @@index([isFavorite])
+}
+
+// Git 빠른 액션(워크플로우). projectId가 null이면 전역 프리셋.
+// steps는 JSON 문자열. 형식은 TypeScript 쪽 Step 타입 참조.
+model QuickAction {
+  id        String   @id @default(cuid())
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  icon      String?
+  steps     String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([projectId, order])
+}
+
+model Ticket {
+  id                String   @id @default(cuid())
+  projectId         String
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title             String
+  description       String?
+  type              String   @default("feature") // feature | bug | improvement | check
+  successCriteria   String?
+  jiraKey           String?
+  sessionId         String?  // Claude Code 세션 재사용 id
+  status            String   @default("backlog") // backlog | in_progress | review | done
+  priority          Int      @default(0)
+  order             Int      @default(0)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  reworkCount       Int      @default(0)
+  lastReworkRequest String?
+  resultSummary     String?  // 작업 결과 요약
+  pdcaStage         String?  // null=일반 티켓, "plan"|"design"|"do"|"check"|"report"=PDCA 티켓 현재 단계
+  autoMode          String   @default("manual")  // manual | after_plan | full
+  commitMode        String   @default("none")    // none | commit | commit_push
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([projectId, status])
+  @@index([jiraKey])
+}
+
+model Setting {
+  key   String @id
+  value String
+}

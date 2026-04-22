@@ -1,0 +1,1469 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cockpit — 개발자를 위한 완전체 워크벤치</title>
+<meta name="description" content="터미널, 칸반, Git, Jira, Claude PDCA 자동화까지. 한 줄로 설치하는 macOS 통합 개발 허브." />
+<meta name="theme-color" content="#0b0b12" />
+
+<!-- Open Graph -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Cockpit — 개발자를 위한 완전체 워크벤치" />
+<meta property="og:description" content="터미널·칸반·Git·Jira·Claude PDCA 자동화까지 하나로. 한 줄 설치. macOS 네이티브." />
+<meta property="og:image" content="./assets/logo.png" />
+
+<link rel="icon" type="image/svg+xml" href="./assets/logo.svg" />
+<link rel="apple-touch-icon" href="./assets/logo.png" />
+
+<!-- Pretendard (한글 최적화) + Inter + JetBrains Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" />
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+
+<!-- Tailwind CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['"Pretendard Variable"', 'Pretendard', 'Inter', 'system-ui', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        colors: {
+          ink: {
+            950: '#07070d',
+            900: '#0b0b12',
+            800: '#12121c',
+            700: '#1a1a28',
+            600: '#232336',
+            500: '#2e2e46',
+          },
+          brand: {
+            50: '#f5f3ff',
+            300: '#c4b5fd',
+            400: '#a78bfa',
+            500: '#8b5cf6',
+            600: '#7c3aed',
+            700: '#6d28d9',
+            800: '#5b21b6',
+          },
+        },
+        boxShadow: {
+          glow: '0 0 80px -10px rgba(139, 92, 246, 0.5)',
+          card: '0 10px 40px -10px rgba(0,0,0,0.5)',
+        },
+        animation: {
+          'float': 'float 6s ease-in-out infinite',
+          'shimmer': 'shimmer 3s linear infinite',
+        },
+        keyframes: {
+          float: {
+            '0%, 100%': { transform: 'translateY(0)' },
+            '50%': { transform: 'translateY(-10px)' },
+          },
+          shimmer: {
+            '0%': { backgroundPosition: '-200% 0' },
+            '100%': { backgroundPosition: '200% 0' },
+          },
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Lucide icons -->
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+<style>
+  html { scroll-behavior: smooth; }
+  body {
+    background:
+      radial-gradient(1000px 500px at 80% -200px, rgba(139,92,246,0.20), transparent 70%),
+      radial-gradient(800px 500px at 0% 20%, rgba(124,58,237,0.15), transparent 70%),
+      #07070d;
+    color: #e5e7f0;
+  }
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse at 50% 0%, black 40%, transparent 80%);
+  }
+  .text-gradient {
+    background: linear-gradient(120deg, #e9d5ff 0%, #a78bfa 40%, #7c3aed 70%, #c4b5fd 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 6s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50%      { background-position: 100% 50%; }
+  }
+  .glass {
+    background: rgba(18, 18, 28, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  .card-border {
+    background:
+      linear-gradient(#12121c, #12121c) padding-box,
+      linear-gradient(135deg, rgba(139,92,246,0.5), rgba(255,255,255,0.05) 40%, rgba(139,92,246,0.3)) border-box;
+    border: 1px solid transparent;
+  }
+  .kbd {
+    font-family: 'JetBrains Mono', monospace;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-bottom-width: 2px;
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 0.78em;
+    color: #e5e7f0;
+  }
+  .check::before {
+    content: "✓";
+    color: #a78bfa;
+    font-weight: 700;
+    margin-right: 0.5rem;
+  }
+  details > summary { list-style: none; cursor: pointer; }
+  details > summary::-webkit-details-marker { display: none; }
+  details[open] .chev { transform: rotate(180deg); }
+  .chev { transition: transform .2s ease; }
+  .copy-btn[data-copied="1"] .lbl { display:none; }
+  .copy-btn[data-copied="1"] .lbl-ok { display:inline !important; }
+</style>
+</head>
+
+<body class="font-sans antialiased">
+
+<!-- ═══════════════════════════ NAV ═══════════════════════════ -->
+<header class="fixed top-0 inset-x-0 z-50 glass border-b border-white/5">
+  <nav class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+    <a href="#top" class="flex items-center gap-2">
+      <img src="./assets/logo.svg" alt="Cockpit" class="w-8 h-8 rounded-lg" />
+      <span class="font-bold text-lg tracking-tight">Cockpit</span>
+    </a>
+    <div class="hidden md:flex items-center gap-7 text-sm text-white/70">
+      <a href="#features" class="hover:text-white transition">기능</a>
+      <a href="#showcase" class="hover:text-white transition">화면</a>
+      <a href="#pdca" class="hover:text-white transition">PDCA 자동화</a>
+      <a href="#install" class="hover:text-white transition">설치</a>
+      <a href="#guide" class="hover:text-white transition">가이드</a>
+      <a href="#faq" class="hover:text-white transition">FAQ</a>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="https://github.com/myounghalee/cockpit" target="_blank" rel="noopener"
+         class="hidden sm:inline-flex items-center gap-1.5 text-sm text-white/70 hover:text-white px-3 py-1.5 rounded-lg border border-white/10 hover:border-white/20 transition">
+        <i data-lucide="github" class="w-4 h-4"></i> GitHub
+      </a>
+      <a href="#install"
+         class="inline-flex items-center gap-1.5 text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-lg transition shadow-glow">
+        다운로드
+      </a>
+    </div>
+  </nav>
+</header>
+
+<!-- ═══════════════════════════ HERO ═══════════════════════════ -->
+<section id="top" class="relative overflow-hidden pt-32 pb-24">
+  <div class="absolute inset-0 grid-bg pointer-events-none"></div>
+
+  <div class="relative max-w-7xl mx-auto px-6">
+    <!-- 상단 뱃지 -->
+    <div class="flex justify-center mb-6">
+      <a href="https://github.com/myounghalee/cockpit/releases/latest" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-full border border-brand-500/40 bg-brand-500/10 text-brand-300 hover:bg-brand-500/20 transition">
+        <span class="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse"></span>
+        v1.0.6 릴리스 · macOS arm64/x64
+        <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+      </a>
+    </div>
+
+    <!-- 타이틀 -->
+    <h1 class="text-center text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-[1.05]">
+      <span class="text-white">개발자 워크플로우의</span><br />
+      <span class="text-gradient">모든 것</span>
+      <span class="text-white">을 한 화면에.</span>
+    </h1>
+
+    <p class="mt-7 text-center text-lg md:text-xl text-white/70 max-w-3xl mx-auto leading-relaxed">
+      터미널, 칸반, Git, Jira, 그리고 <strong class="text-white">Claude 기반 PDCA 자동화</strong>까지.
+      티켓을 만들면 <em>요구사항 분석 → 설계 → 구현 → 검증 → 커밋/PR</em>까지 혼자 굴러갑니다.
+      <br class="hidden md:block"/>
+      당신은 결과만 확인하세요.
+    </p>
+
+    <!-- 원라인 설치 -->
+    <div class="mt-10 max-w-3xl mx-auto">
+      <div class="card-border rounded-2xl p-1.5 shadow-card">
+        <div class="flex items-center gap-2 bg-ink-900 rounded-xl p-4 pl-5">
+          <i data-lucide="terminal" class="w-4 h-4 text-brand-400 shrink-0"></i>
+          <code id="install-cmd" class="flex-1 font-mono text-sm text-white/90 truncate">
+curl -fsSL https://github.com/myounghalee/cockpit/releases/latest/download/install-macos.sh | bash
+          </code>
+          <button onclick="copyInstall(this)"
+                  class="copy-btn shrink-0 inline-flex items-center gap-1.5 text-xs font-medium bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-lg transition"
+                  data-copied="0">
+            <i data-lucide="copy" class="w-3.5 h-3.5 lbl"></i>
+            <span class="lbl">복사</span>
+            <i data-lucide="check" class="w-3.5 h-3.5 lbl-ok hidden"></i>
+            <span class="lbl-ok hidden">복사됨</span>
+          </button>
+        </div>
+      </div>
+      <p class="mt-3 text-xs text-center text-white/50">
+        한 줄로 끝 · Node.js 없어도 자동 설치 · 비밀번호 필요 없음 · 평균 2-5분
+      </p>
+    </div>
+
+    <!-- CTA -->
+    <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+      <a href="https://github.com/myounghalee/cockpit/releases/latest" target="_blank" rel="noopener"
+         class="inline-flex items-center gap-2 bg-white text-ink-900 hover:bg-white/90 font-semibold px-5 py-3 rounded-xl transition shadow-lg">
+        <i data-lucide="download" class="w-4 h-4"></i> DMG 직접 다운로드
+      </a>
+      <a href="#pdca"
+         class="inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium px-5 py-3 rounded-xl transition">
+        <i data-lucide="sparkles" class="w-4 h-4 text-brand-400"></i> PDCA 자동화 보기
+      </a>
+    </div>
+
+    <!-- 소셜 프루프 라인 -->
+    <div class="mt-12 flex flex-wrap items-center justify-center gap-6 text-xs text-white/40 uppercase tracking-wider">
+      <span>Next.js 15</span>
+      <span class="w-1 h-1 rounded-full bg-white/20"></span>
+      <span>Electron 41</span>
+      <span class="w-1 h-1 rounded-full bg-white/20"></span>
+      <span>React 19</span>
+      <span class="w-1 h-1 rounded-full bg-white/20"></span>
+      <span>Claude Code CLI</span>
+      <span class="w-1 h-1 rounded-full bg-white/20"></span>
+      <span>SQLite + Prisma</span>
+    </div>
+
+    <!-- 스크린샷 프레임 -->
+    <div class="mt-20 relative max-w-6xl mx-auto animate-float">
+      <div class="absolute -inset-4 bg-gradient-to-r from-brand-500/30 to-brand-700/30 blur-3xl rounded-3xl"></div>
+      <div class="relative rounded-2xl overflow-hidden border border-white/10 shadow-glow bg-ink-900">
+        <!-- 가짜 창 헤더 -->
+        <div class="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-ink-950">
+          <span class="w-3 h-3 rounded-full bg-red-500/70"></span>
+          <span class="w-3 h-3 rounded-full bg-yellow-500/70"></span>
+          <span class="w-3 h-3 rounded-full bg-green-500/70"></span>
+          <span class="ml-4 text-xs text-white/40 font-mono">Cockpit — my-project / kanban</span>
+        </div>
+        <!-- 앱 미리보기 (ASCII 모션그래픽) -->
+        <div class="grid grid-cols-12 gap-0 min-h-[420px]">
+          <!-- 사이드바 -->
+          <aside class="col-span-2 border-r border-white/5 p-4 space-y-3 text-sm">
+            <div class="flex items-center gap-2 text-white/60"><i data-lucide="folder-kanban" class="w-4 h-4"></i> 프로젝트</div>
+            <div class="flex items-center gap-2 text-white/90 font-medium"><i data-lucide="square-kanban" class="w-4 h-4 text-brand-400"></i> 칸반</div>
+            <div class="flex items-center gap-2 text-white/60"><i data-lucide="terminal-square" class="w-4 h-4"></i> 터미널</div>
+            <div class="flex items-center gap-2 text-white/60"><i data-lucide="git-branch" class="w-4 h-4"></i> Git</div>
+            <div class="flex items-center gap-2 text-white/60"><i data-lucide="settings" class="w-4 h-4"></i> 설정</div>
+          </aside>
+          <!-- 메인 -->
+          <main class="col-span-10 p-5 grid grid-cols-4 gap-3">
+            <!-- Backlog -->
+            <div class="space-y-2">
+              <div class="text-xs uppercase tracking-wider text-white/40 font-semibold">Backlog</div>
+              <div class="card-border rounded-lg p-3 text-sm">
+                <div class="text-xs text-brand-400 mb-1">PROJ-142</div>
+                <div class="font-medium">로그인 페이지 반응형 수정</div>
+              </div>
+              <div class="card-border rounded-lg p-3 text-sm">
+                <div class="text-xs text-brand-400 mb-1">PROJ-143</div>
+                <div class="font-medium">주문 필터 정렬 추가</div>
+              </div>
+            </div>
+            <!-- In Progress -->
+            <div class="space-y-2">
+              <div class="text-xs uppercase tracking-wider text-white/40 font-semibold">In Progress</div>
+              <div class="card-border rounded-lg p-3 text-sm ring-1 ring-brand-500/50">
+                <div class="flex items-center justify-between mb-1">
+                  <div class="text-xs text-brand-400">PROJ-141</div>
+                  <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-300 animate-pulse">● 실행중</span>
+                </div>
+                <div class="font-medium mb-2">결제 모듈 PG 연동</div>
+                <div class="text-xs text-white/50 space-y-0.5 font-mono">
+                  <div>✓ Plan — 분석 완료</div>
+                  <div>✓ Design — 설계 완료</div>
+                  <div class="text-brand-300">▶ Do — 4/7 구현중</div>
+                  <div class="text-white/30">· Check — 대기</div>
+                  <div class="text-white/30">· Act — 대기</div>
+                </div>
+              </div>
+            </div>
+            <!-- Review -->
+            <div class="space-y-2">
+              <div class="text-xs uppercase tracking-wider text-white/40 font-semibold">Review</div>
+              <div class="card-border rounded-lg p-3 text-sm opacity-90">
+                <div class="text-xs text-brand-400 mb-1">PROJ-140</div>
+                <div class="font-medium">쿠폰 적용 버그 수정</div>
+                <div class="mt-2 text-[11px] text-emerald-300 font-mono">PR #284 열림</div>
+              </div>
+            </div>
+            <!-- Done -->
+            <div class="space-y-2">
+              <div class="text-xs uppercase tracking-wider text-white/40 font-semibold">Done</div>
+              <div class="card-border rounded-lg p-3 text-sm opacity-70">
+                <div class="text-xs text-brand-400 mb-1">PROJ-139</div>
+                <div class="font-medium">상품 API 페이지네이션</div>
+              </div>
+              <div class="card-border rounded-lg p-3 text-sm opacity-70">
+                <div class="text-xs text-brand-400 mb-1">PROJ-138</div>
+                <div class="font-medium">썸네일 WebP 변환</div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 가치 한 줄 ═══════════════════════════ -->
+<section class="py-10">
+  <div class="max-w-5xl mx-auto px-6 text-center">
+    <p class="text-xl md:text-2xl font-medium leading-relaxed text-white/80">
+      <span class="text-white">IDE는 코드를 쓴다.</span>
+      <span class="text-white/50"> Cockpit은 </span>
+      <span class="text-gradient font-bold">일</span>
+      <span class="text-white/50">을 합니다.</span>
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 기능 ═══════════════════════════ -->
+<section id="features" class="py-24">
+  <div class="max-w-7xl mx-auto px-6">
+    <div class="text-center mb-16">
+      <div class="inline-block text-xs font-bold uppercase tracking-widest text-brand-400 mb-3">Features</div>
+      <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight text-white">하나로 끝내세요.</h2>
+      <p class="mt-4 text-lg text-white/60 max-w-2xl mx-auto">
+        여기저기 흩어진 탭 10개를 하나의 네이티브 앱으로.
+      </p>
+    </div>
+
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <!-- card template -->
+      <div class="card-border rounded-2xl p-6 hover:-translate-y-1 transition shadow-card">
+        <div class="w-11 h-11 rounded-xl bg-brand-500/15 text-brand-300 flex items-center justify-center mb-4">
+          <i data-lucide="folder-kanban" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2">프로젝트 허브</h3>
+        <p class="text-sm text-white/60 leading-relaxed">로컬 폴더를 프로젝트로 등록. 즐겨찾기, 그룹, 파일 트리, 미리보기까지 한 화면.</p>
+      </div>
+
+      <div class="card-border rounded-2xl p-6 hover:-translate-y-1 transition shadow-card">
+        <div class="w-11 h-11 rounded-xl bg-brand-500/15 text-brand-300 flex items-center justify-center mb-4">
+          <i data-lucide="terminal-square" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2">분할 터미널</h3>
+        <p class="text-sm text-white/60 leading-relaxed">xterm.js + node-pty 기반 실제 PTY. 좌우/상하 분할, 멀티 탭, 페이지 이동해도 세션 유지.</p>
+      </div>
+
+      <div class="card-border rounded-2xl p-6 hover:-translate-y-1 transition shadow-card ring-1 ring-brand-500/30">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-11 h-11 rounded-xl bg-brand-500/20 text-brand-300 flex items-center justify-center">
+            <i data-lucide="sparkles" class="w-5 h-5"></i>
+          </div>
+          <span class="text-[10px] font-bold uppercase tracking-wider bg-brand-500 text-white px-2 py-0.5 rounded">핵심</span>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2">PDCA 자동화 칸반</h3>
+        <p class="text-sm text-white/60 leading-relaxed">티켓 하나로 Plan → Do → Check → Act 자동 실행. Claude가 계획하고 구현하고 검증해서 PR까지.</p>
+      </div>
+
+      <div class="card-border rounded-2xl p-6 hover:-translate-y-1 transition shadow-card">
+        <div class="w-11 h-11 rounded-xl bg-brand-500/15 text-brand-300 flex items-center justify-center mb-4">
+          <i data-lucide="git-branch" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2">Git 클라이언트</h3>
+        <p class="text-sm text-white/60 leading-relaxed">커밋 그래프, diff, 스테이징, push/pull, merge/rebase, stash. Untracked 파일도 diff 뷰로.</p>
+      </div>
+
+      <div class="card-border rounded-2xl p-6 hover:-translate-y-1 transition shadow-card">
+        <div class="w-11 h-11 rounded-xl bg-brand-500/15 text-brand-300 flex items-center justify-center mb-4">
+          <i data-lucide="ticket" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2">Jira 연동</h3>
+        <p class="text-sm text-white/60 leading-relaxed">미해결 이슈를 헤더 버튼 한 번에. 임포트 → 티켓 → 실행 → 상태 자동 전환.</p>
+      </div>
+
+      <div class="card-border rounded-2xl p-6 hover:-translate-y-1 transition shadow-card">
+        <div class="w-11 h-11 rounded-xl bg-brand-500/15 text-brand-300 flex items-center justify-center mb-4">
+          <i data-lucide="file-code-2" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2">파일 뷰어 + 외부 에디터</h3>
+        <p class="text-sm text-white/60 leading-relaxed">인앱 파일 뷰어(markdown 렌더). "VS Code / Cursor / WebStorm으로 열기" 원클릭.</p>
+      </div>
+
+      <div class="card-border rounded-2xl p-6 hover:-translate-y-1 transition shadow-card">
+        <div class="w-11 h-11 rounded-xl bg-brand-500/15 text-brand-300 flex items-center justify-center mb-4">
+          <i data-lucide="bell-ring" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2">푸시 알림</h3>
+        <p class="text-sm text-white/60 leading-relaxed">티켓 완료되면 macOS 알림. 클릭하면 바로 결과 화면으로 점프.</p>
+      </div>
+
+      <div class="card-border rounded-2xl p-6 hover:-translate-y-1 transition shadow-card">
+        <div class="w-11 h-11 rounded-xl bg-brand-500/15 text-brand-300 flex items-center justify-center mb-4">
+          <i data-lucide="keyboard" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2">키보드 퍼스트</h3>
+        <p class="text-sm text-white/60 leading-relaxed">
+          <span class="kbd">⌃</span> <span class="kbd">1-5</span> 메뉴 전환, <span class="kbd">⌘</span> <span class="kbd">1-9</span> 터미널 탭, <span class="kbd">⌘</span> <span class="kbd">S</span> 사이드바.
+        </p>
+      </div>
+
+      <div class="card-border rounded-2xl p-6 hover:-translate-y-1 transition shadow-card">
+        <div class="w-11 h-11 rounded-xl bg-brand-500/15 text-brand-300 flex items-center justify-center mb-4">
+          <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2">자동 업데이트</h3>
+        <p class="text-sm text-white/60 leading-relaxed">앱 실행하면 백그라운드에서 최신 소스 반영. 인앱 배너로 "재시작" 한 번이면 끝.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ SHOWCASE ═══════════════════════════ -->
+<section id="showcase" class="py-24 relative overflow-hidden">
+  <div class="absolute inset-0 grid-bg opacity-30 pointer-events-none"></div>
+
+  <div class="relative max-w-7xl mx-auto px-6">
+    <div class="text-center mb-16">
+      <div class="inline-block text-xs font-bold uppercase tracking-widest text-brand-400 mb-3">Showcase</div>
+      <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight text-white">칸반만 있는 게 아닙니다.</h2>
+      <p class="mt-4 text-lg text-white/60 max-w-2xl mx-auto">
+        터미널과 Git도 1급 시민. 따로 <code class="text-brand-300">iTerm</code>, <code class="text-brand-300">Sourcetree</code> 띄울 필요 없어요.
+      </p>
+    </div>
+
+    <!-- ───── 터미널 쇼케이스 ───── -->
+    <div class="grid lg:grid-cols-5 gap-10 items-center mb-24">
+      <!-- 목업 (좌) -->
+      <div class="lg:col-span-3 relative">
+        <div class="absolute -inset-4 bg-gradient-to-r from-brand-500/20 to-brand-700/20 blur-3xl rounded-3xl"></div>
+        <div class="relative rounded-2xl overflow-hidden border border-white/10 shadow-glow bg-ink-900">
+          <!-- 창 헤더 + 탭 -->
+          <div class="bg-ink-950 border-b border-white/5">
+            <div class="flex items-center gap-2 px-4 py-3">
+              <span class="w-3 h-3 rounded-full bg-red-500/70"></span>
+              <span class="w-3 h-3 rounded-full bg-yellow-500/70"></span>
+              <span class="w-3 h-3 rounded-full bg-green-500/70"></span>
+              <span class="ml-4 text-xs text-white/40 font-mono">Cockpit — Terminal</span>
+              <div class="ml-auto flex items-center gap-1.5 text-white/40">
+                <i data-lucide="split-square-horizontal" class="w-4 h-4 hover:text-white/80 transition cursor-pointer"></i>
+                <i data-lucide="split-square-vertical" class="w-4 h-4 hover:text-white/80 transition cursor-pointer"></i>
+              </div>
+            </div>
+            <!-- 탭 바 -->
+            <div class="flex items-center gap-0.5 px-2 text-xs font-mono">
+              <div class="flex items-center gap-2 px-3 py-2 bg-ink-900 border-t border-x border-white/5 text-white rounded-t-md">
+                <i data-lucide="terminal" class="w-3 h-3 text-brand-400"></i>
+                <span>zsh · ~/my-project</span>
+                <span class="text-white/30 hover:text-white/60 ml-1">×</span>
+              </div>
+              <div class="flex items-center gap-2 px-3 py-2 text-white/50 hover:bg-ink-800 cursor-pointer">
+                <i data-lucide="terminal" class="w-3 h-3"></i>
+                <span>pnpm dev</span>
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              </div>
+              <div class="flex items-center gap-2 px-3 py-2 text-white/50 hover:bg-ink-800 cursor-pointer">
+                <i data-lucide="terminal" class="w-3 h-3"></i>
+                <span>logs -f</span>
+              </div>
+              <div class="flex items-center gap-2 px-3 py-2 text-white/50 hover:bg-ink-800 cursor-pointer">
+                <i data-lucide="terminal" class="w-3 h-3"></i>
+                <span>ssh prod</span>
+              </div>
+              <button class="px-2 py-1.5 ml-1 text-white/40 hover:text-white/80 rounded transition">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+          <!-- 분할 페인 -->
+          <div class="grid grid-cols-2 min-h-[340px] font-mono text-[11px] leading-relaxed">
+            <!-- 왼쪽 페인: pnpm dev -->
+            <div class="p-4 border-r border-white/5">
+              <div class="flex items-center gap-1.5 mb-2 text-[10px] text-white/40 uppercase tracking-wider">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                pane 1 · active
+              </div>
+              <div class="space-y-0.5">
+                <div class="text-brand-300">$ pnpm dev</div>
+                <div class="text-white/60"></div>
+                <div class="text-white/80">&gt; cockpit@1.0.6 dev /Users/me/my-project</div>
+                <div class="text-white/80">&gt; tsx server.ts</div>
+                <div class="text-white/60"></div>
+                <div class="text-emerald-300">✓ Starting server...</div>
+                <div class="text-emerald-300">✓ Ready in 1.2s</div>
+                <div class="text-white/60"></div>
+                <div class="text-white/80"><span class="text-brand-400">▲</span> Next.js 15.1.3</div>
+                <div class="text-white/80">   - Local:    http://localhost:4000</div>
+                <div class="text-white/80">   - Network:  http://192.168.1.24:4000</div>
+                <div class="text-white/60"></div>
+                <div class="text-yellow-300">○ Compiling /kanban ...</div>
+                <div class="text-emerald-300">✓ Compiled /kanban in 340ms</div>
+                <div class="text-white/40">GET /kanban 200 in 412ms</div>
+                <div class="text-white/40">GET /api/tickets 200 in 28ms</div>
+                <div class="text-white/40">GET /api/projects 200 in 12ms<span class="inline-block w-2 h-3.5 align-middle bg-brand-400 ml-1 animate-pulse"></span></div>
+              </div>
+            </div>
+            <!-- 오른쪽 페인: git status -->
+            <div class="p-4">
+              <div class="flex items-center gap-1.5 mb-2 text-[10px] text-white/40 uppercase tracking-wider">
+                <span class="w-1.5 h-1.5 rounded-full bg-white/30"></span>
+                pane 2
+              </div>
+              <div class="space-y-0.5">
+                <div class="text-brand-300">$ git status</div>
+                <div class="text-white/80">On branch <span class="text-emerald-300">ticket/PROJ-141</span></div>
+                <div class="text-white/80">Your branch is up to date with 'origin/ticket/PROJ-141'.</div>
+                <div class="text-white/60"></div>
+                <div class="text-white/80">Changes not staged for commit:</div>
+                <div class="text-red-300">  modified:   src/lib/payment-pg.ts</div>
+                <div class="text-red-300">  modified:   src/components/checkout/form.tsx</div>
+                <div class="text-red-300">  modified:   prisma/schema.prisma</div>
+                <div class="text-white/60"></div>
+                <div class="text-white/80">Untracked files:</div>
+                <div class="text-red-300">  src/lib/payment-pg.test.ts</div>
+                <div class="text-white/60"></div>
+                <div class="text-brand-300">$ pnpm test payment-pg</div>
+                <div class="text-emerald-300">PASS  src/lib/payment-pg.test.ts</div>
+                <div class="text-white/60">  PG 결제 통합</div>
+                <div class="text-emerald-300">    ✓ 결제 요청 생성 (18 ms)</div>
+                <div class="text-emerald-300">    ✓ 승인 콜백 처리 (9 ms)</div>
+                <div class="text-emerald-300">    ✓ 취소 → 환불 흐름 (24 ms)</div>
+                <div class="text-white/60"></div>
+                <div class="text-brand-300">$ <span class="inline-block w-2 h-3.5 align-middle bg-brand-400 ml-0.5 animate-pulse"></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 텍스트 (우) -->
+      <div class="lg:col-span-2">
+        <div class="inline-flex items-center gap-2 text-brand-400 mb-3">
+          <i data-lucide="terminal-square" class="w-5 h-5"></i>
+          <span class="text-xs font-bold uppercase tracking-widest">Terminal</span>
+        </div>
+        <h3 class="text-3xl font-extrabold text-white mb-4 leading-tight">진짜 PTY,<br/>멀티 탭과 분할까지.</h3>
+        <p class="text-white/70 leading-relaxed mb-6">
+          xterm.js 에뮬레이터 + node-pty 기반. <strong class="text-white">zsh, vim, tmux, ssh 그대로</strong> 동작합니다.
+          페이지 이동했다 돌아와도 세션은 살아있고, <code class="text-brand-300">pnpm dev</code>는 계속 돌아갑니다.
+        </p>
+        <ul class="space-y-3 text-sm text-white/80">
+          <li class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-md bg-brand-500/15 text-brand-300 flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="layout-panel-left" class="w-3.5 h-3.5"></i>
+            </div>
+            <div>
+              <strong class="text-white">좌우/상하 분할</strong>
+              <span class="text-white/60"> — 서버 로그 + 테스트 + SSH 한 화면.</span>
+            </div>
+          </li>
+          <li class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-md bg-brand-500/15 text-brand-300 flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+            </div>
+            <div>
+              <strong class="text-white">세션 영속화</strong>
+              <span class="text-white/60"> — 탭 전환·페이지 이동해도 살아있음.</span>
+            </div>
+          </li>
+          <li class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-md bg-brand-500/15 text-brand-300 flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="command" class="w-3.5 h-3.5"></i>
+            </div>
+            <div>
+              <strong class="text-white">단축키 네이티브</strong>
+              <span class="text-white/60"> — </span>
+              <span class="kbd">⌘</span> <span class="kbd">T</span> 새 탭, <span class="kbd">⌘</span> <span class="kbd">1-9</span> 전환, <span class="kbd">⌘</span> <span class="kbd">W</span> 닫기.
+            </div>
+          </li>
+          <li class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-md bg-brand-500/15 text-brand-300 flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="type" class="w-3.5 h-3.5"></i>
+            </div>
+            <div>
+              <strong class="text-white">폰트 크기 설정</strong>
+              <span class="text-white/60"> — 터미널/마크다운 따로 조정 가능.</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ───── Git 쇼케이스 ───── -->
+    <div class="grid lg:grid-cols-5 gap-10 items-center">
+      <!-- 텍스트 (좌) -->
+      <div class="lg:col-span-2 lg:order-1 order-2">
+        <div class="inline-flex items-center gap-2 text-brand-400 mb-3">
+          <i data-lucide="git-branch" class="w-5 h-5"></i>
+          <span class="text-xs font-bold uppercase tracking-widest">Git</span>
+        </div>
+        <h3 class="text-3xl font-extrabold text-white mb-4 leading-tight">커밋 그래프 + Diff.<br/>Sourcetree 안녕.</h3>
+        <p class="text-white/70 leading-relaxed mb-6">
+          <code class="text-brand-300">execFile</code> 기반 (shell=false) 안전한 Git 통합.
+          <strong class="text-white">Untracked 파일도 diff 뷰</strong>로 확인 가능하고, merge/rebase/stash까지 버튼으로.
+        </p>
+        <ul class="space-y-3 text-sm text-white/80">
+          <li class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-md bg-brand-500/15 text-brand-300 flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="git-graph" class="w-3.5 h-3.5"></i>
+            </div>
+            <div>
+              <strong class="text-white">전체 커밋 그래프</strong>
+              <span class="text-white/60"> — 브랜치·머지 시각적으로. 현재 브랜치 필터 토글.</span>
+            </div>
+          </li>
+          <li class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-md bg-brand-500/15 text-brand-300 flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="file-diff" class="w-3.5 h-3.5"></i>
+            </div>
+            <div>
+              <strong class="text-white">파일별 스테이징</strong>
+              <span class="text-white/60"> — 청크 단위는 아니어도 파일 단위는 완벽.</span>
+            </div>
+          </li>
+          <li class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-md bg-brand-500/15 text-brand-300 flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="git-merge" class="w-3.5 h-3.5"></i>
+            </div>
+            <div>
+              <strong class="text-white">Merge / Rebase / Abort</strong>
+              <span class="text-white/60"> — 충돌 나면 상태 표시, 해결 후 계속.</span>
+            </div>
+          </li>
+          <li class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-md bg-brand-500/15 text-brand-300 flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+            </div>
+            <div>
+              <strong class="text-white">Quick Actions</strong>
+              <span class="text-white/60"> — "Fetch → Pull --rebase → Push"를 버튼 하나로.</span>
+            </div>
+          </li>
+          <li class="flex items-start gap-3">
+            <div class="w-6 h-6 rounded-md bg-brand-500/15 text-brand-300 flex items-center justify-center shrink-0 mt-0.5">
+              <i data-lucide="package" class="w-3.5 h-3.5"></i>
+            </div>
+            <div>
+              <strong class="text-white">Stash 관리</strong>
+              <span class="text-white/60"> — 저장·적용·삭제 모두 UI로.</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- 목업 (우) -->
+      <div class="lg:col-span-3 lg:order-2 order-1 relative">
+        <div class="absolute -inset-4 bg-gradient-to-l from-brand-500/20 to-brand-700/20 blur-3xl rounded-3xl"></div>
+        <div class="relative rounded-2xl overflow-hidden border border-white/10 shadow-glow bg-ink-900">
+          <!-- 창 헤더 -->
+          <div class="flex items-center gap-2 px-4 py-3 border-b border-white/5 bg-ink-950">
+            <span class="w-3 h-3 rounded-full bg-red-500/70"></span>
+            <span class="w-3 h-3 rounded-full bg-yellow-500/70"></span>
+            <span class="w-3 h-3 rounded-full bg-green-500/70"></span>
+            <span class="ml-4 text-xs text-white/40 font-mono">Cockpit — Git</span>
+            <div class="ml-auto flex items-center gap-2">
+              <button class="text-[11px] text-white/60 hover:text-white px-2 py-1 rounded border border-white/10 hover:border-white/20 flex items-center gap-1">
+                <i data-lucide="arrow-down-to-line" class="w-3 h-3"></i> Pull
+              </button>
+              <button class="text-[11px] text-white/60 hover:text-white px-2 py-1 rounded border border-white/10 hover:border-white/20 flex items-center gap-1">
+                <i data-lucide="arrow-up-from-line" class="w-3 h-3"></i> Push
+              </button>
+              <button class="text-[11px] text-white bg-brand-600 hover:bg-brand-500 px-2 py-1 rounded flex items-center gap-1">
+                <i data-lucide="zap" class="w-3 h-3"></i> Quick
+              </button>
+            </div>
+          </div>
+
+          <!-- 브랜치 바 -->
+          <div class="flex items-center gap-3 px-4 py-2 border-b border-white/5 text-xs">
+            <span class="flex items-center gap-1.5 text-white/70">
+              <i data-lucide="git-branch" class="w-3.5 h-3.5 text-brand-400"></i>
+              <span class="font-mono text-white">ticket/PROJ-141</span>
+            </span>
+            <span class="text-white/40">·</span>
+            <span class="text-emerald-300 font-mono">↑2 ↓0</span>
+            <span class="text-white/40">·</span>
+            <span class="text-white/50 text-[11px]">main에서 3 커밋 앞섬</span>
+          </div>
+
+          <!-- 그래프 + diff 분할 -->
+          <div class="grid grid-cols-5 min-h-[360px]">
+            <!-- 그래프 -->
+            <div class="col-span-2 border-r border-white/5 p-3 space-y-0 text-[11px] font-mono">
+              <!-- commit row template -->
+              <div class="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-white/5 cursor-pointer bg-brand-500/10 ring-1 ring-brand-500/30">
+                <div class="flex flex-col items-center w-3 shrink-0">
+                  <div class="w-2 h-2 rounded-full bg-brand-400"></div>
+                  <div class="w-px flex-1 bg-white/20 mt-0.5"></div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-white truncate">feat(payment): PG 승인 콜백</div>
+                  <div class="text-white/40 text-[10px]">a3f21bc · 2분 전</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-white/5 cursor-pointer">
+                <div class="flex flex-col items-center w-3 shrink-0">
+                  <div class="w-2 h-2 rounded-full bg-brand-400"></div>
+                  <div class="w-px flex-1 bg-white/20 mt-0.5"></div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-white/80 truncate">test: PG 취소 환불 흐름</div>
+                  <div class="text-white/40 text-[10px]">7e09a34 · 14분 전</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-white/5 cursor-pointer">
+                <div class="flex flex-col items-center w-3 shrink-0">
+                  <div class="w-2 h-2 rounded-full bg-brand-400"></div>
+                  <div class="w-px flex-1 bg-white/20 mt-0.5"></div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-white/80 truncate">feat(payment): 결제 요청 스키마</div>
+                  <div class="text-white/40 text-[10px]">c2b9f18 · 1시간 전</div>
+                </div>
+              </div>
+              <!-- merge node -->
+              <div class="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-white/5 cursor-pointer">
+                <div class="flex flex-col items-center w-3 shrink-0">
+                  <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-emerald-300/30"></div>
+                  <div class="w-px flex-1 bg-white/20 mt-0.5"></div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-emerald-300/90 truncate">Merge: main ← ticket/PROJ-139</div>
+                  <div class="text-white/40 text-[10px]">8970f14 · 어제</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-white/5 cursor-pointer">
+                <div class="flex flex-col items-center w-3 shrink-0">
+                  <div class="w-2 h-2 rounded-full bg-white/50"></div>
+                  <div class="w-px flex-1 bg-white/20 mt-0.5"></div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-white/70 truncate">chore: 의존성 업데이트</div>
+                  <div class="text-white/40 text-[10px]">15c70e9 · 어제</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-white/5 cursor-pointer">
+                <div class="flex flex-col items-center w-3 shrink-0">
+                  <div class="w-2 h-2 rounded-full bg-white/50"></div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-white/70 truncate">docs: README 설치 가이드</div>
+                  <div class="text-white/40 text-[10px]">c7d4fbf · 2일 전</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- diff 영역 -->
+            <div class="col-span-3 text-[11px] font-mono">
+              <!-- diff 헤더 -->
+              <div class="flex items-center gap-2 px-3 py-2 border-b border-white/5 bg-ink-950 text-white/60">
+                <i data-lucide="file-text" class="w-3.5 h-3.5 text-brand-400"></i>
+                <span class="text-white/90">src/lib/payment-pg.ts</span>
+                <span class="text-emerald-400">+23</span>
+                <span class="text-red-400">-4</span>
+                <div class="ml-auto flex items-center gap-1">
+                  <button class="px-2 py-0.5 text-[10px] rounded bg-brand-600 hover:bg-brand-500 text-white">Stage</button>
+                  <button class="px-2 py-0.5 text-[10px] rounded border border-white/10 hover:bg-white/5 text-white/70">Discard</button>
+                </div>
+              </div>
+              <!-- diff 본문 -->
+              <div class="p-3 space-y-0 leading-relaxed">
+                <div class="text-white/40">@@ -14,6 +14,22 @@ export class PaymentPG {</div>
+                <div class="grid grid-cols-[auto_1fr] gap-3">
+                  <div class="text-white/30 text-right pr-1">14</div>
+                  <div class="text-white/70">  async request(order: Order) {</div>
+
+                  <div class="text-white/30 text-right pr-1">15</div>
+                  <div class="text-white/70">    const tx = await this.db.tx();</div>
+
+                  <div class="text-red-400 text-right pr-1">-</div>
+                  <div class="text-red-300 bg-red-500/10 -mx-3 px-3">    const res = await fetch(PG_URL, { method: "POST" });</div>
+
+                  <div class="text-emerald-400 text-right pr-1">+</div>
+                  <div class="text-emerald-300 bg-emerald-500/10 -mx-3 px-3">    const signed = this.signBody(order);</div>
+
+                  <div class="text-emerald-400 text-right pr-1">+</div>
+                  <div class="text-emerald-300 bg-emerald-500/10 -mx-3 px-3">    const res = await fetch(PG_URL, {</div>
+
+                  <div class="text-emerald-400 text-right pr-1">+</div>
+                  <div class="text-emerald-300 bg-emerald-500/10 -mx-3 px-3">      method: "POST",</div>
+
+                  <div class="text-emerald-400 text-right pr-1">+</div>
+                  <div class="text-emerald-300 bg-emerald-500/10 -mx-3 px-3">      headers: { "X-PG-Sign": signed },</div>
+
+                  <div class="text-emerald-400 text-right pr-1">+</div>
+                  <div class="text-emerald-300 bg-emerald-500/10 -mx-3 px-3">      body: JSON.stringify(order),</div>
+
+                  <div class="text-emerald-400 text-right pr-1">+</div>
+                  <div class="text-emerald-300 bg-emerald-500/10 -mx-3 px-3">    });</div>
+
+                  <div class="text-white/30 text-right pr-1">23</div>
+                  <div class="text-white/70">    if (!res.ok) throw new PGError(res);</div>
+
+                  <div class="text-emerald-400 text-right pr-1">+</div>
+                  <div class="text-emerald-300 bg-emerald-500/10 -mx-3 px-3">    await this.logApproved(order, tx);</div>
+
+                  <div class="text-white/30 text-right pr-1">24</div>
+                  <div class="text-white/70">    return res.json();</div>
+
+                  <div class="text-white/30 text-right pr-1">25</div>
+                  <div class="text-white/70">  }</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 하단 상태 바 -->
+          <div class="flex items-center gap-4 px-4 py-2 border-t border-white/5 bg-ink-950 text-[10px] text-white/50 font-mono">
+            <span>3 files changed</span>
+            <span>+57</span>
+            <span class="text-red-400">-12</span>
+            <span class="ml-auto text-white/40">click untracked file → see full content as diff</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════ PDCA DEEP DIVE ═══════════════════════════ -->
+<section id="pdca" class="py-24 relative">
+  <div class="absolute inset-0 bg-gradient-to-b from-brand-900/10 via-transparent to-transparent pointer-events-none"></div>
+
+  <div class="relative max-w-7xl mx-auto px-6">
+    <div class="text-center mb-14">
+      <div class="inline-block text-xs font-bold uppercase tracking-widest text-brand-400 mb-3">The Killer Feature</div>
+      <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight text-white">
+        티켓 하나 → <span class="text-gradient">PR 하나</span>.
+      </h2>
+      <p class="mt-4 text-lg text-white/60 max-w-2xl mx-auto">
+        Claude Code를 오케스트레이션해 Plan-Do-Check-Act를 자동 실행합니다.<br/>
+        당신이 하는 건 <strong class="text-white">"실행" 버튼 한 번</strong>.
+      </p>
+    </div>
+
+    <!-- 5단계 타임라인 -->
+    <div class="grid md:grid-cols-5 gap-4 mb-16">
+      <div class="card-border rounded-xl p-5 text-center">
+        <div class="text-4xl font-extrabold text-brand-400 mb-2">1</div>
+        <div class="text-xs uppercase tracking-wider text-white/40 mb-2">Plan</div>
+        <h4 class="font-bold text-white mb-1">요구사항 분석</h4>
+        <p class="text-xs text-white/60 leading-relaxed">티켓을 읽고 목표·제약·성공기준을 <code class="text-brand-300">plan.md</code>로 정리.</p>
+      </div>
+      <div class="card-border rounded-xl p-5 text-center">
+        <div class="text-4xl font-extrabold text-brand-400 mb-2">2</div>
+        <div class="text-xs uppercase tracking-wider text-white/40 mb-2">Design</div>
+        <h4 class="font-bold text-white mb-1">기술 설계</h4>
+        <p class="text-xs text-white/60 leading-relaxed">아키텍처·체크리스트를 <code class="text-brand-300">design.md</code>에. UI 파싱용 포맷.</p>
+      </div>
+      <div class="card-border rounded-xl p-5 text-center ring-1 ring-brand-500/40">
+        <div class="text-4xl font-extrabold text-brand-400 mb-2">3</div>
+        <div class="text-xs uppercase tracking-wider text-white/40 mb-2">Do</div>
+        <h4 class="font-bold text-white mb-1">구현</h4>
+        <p class="text-xs text-white/60 leading-relaxed">체크리스트 <code class="text-brand-300">- [ ]</code> → <code class="text-brand-300">- [x]</code> 진행도를 실시간으로.</p>
+      </div>
+      <div class="card-border rounded-xl p-5 text-center">
+        <div class="text-4xl font-extrabold text-brand-400 mb-2">4</div>
+        <div class="text-xs uppercase tracking-wider text-white/40 mb-2">Check</div>
+        <h4 class="font-bold text-white mb-1">갭 분석</h4>
+        <p class="text-xs text-white/60 leading-relaxed">설계 vs 실제 구현 비교. Match Rate 산출 <code class="text-brand-300">analysis.md</code>.</p>
+      </div>
+      <div class="card-border rounded-xl p-5 text-center">
+        <div class="text-4xl font-extrabold text-brand-400 mb-2">5</div>
+        <div class="text-xs uppercase tracking-wider text-white/40 mb-2">Act</div>
+        <h4 class="font-bold text-white mb-1">커밋 / PR</h4>
+        <p class="text-xs text-white/60 leading-relaxed">요약 <code class="text-brand-300">report.md</code> → 커밋 → 푸시 → <code class="text-brand-300">gh pr create</code>.</p>
+      </div>
+    </div>
+
+    <!-- 실행 모드 비교 -->
+    <div class="grid md:grid-cols-3 gap-5 mb-14">
+      <div class="card-border rounded-2xl p-6">
+        <div class="flex items-center gap-2 mb-3">
+          <i data-lucide="hand" class="w-5 h-5 text-brand-300"></i>
+          <h4 class="font-bold text-white">수동</h4>
+        </div>
+        <p class="text-sm text-white/60 leading-relaxed mb-3">각 단계마다 당신이 확인하고 다음 단계 승인. 신중한 작업에.</p>
+        <ul class="text-xs text-white/50 space-y-1">
+          <li class="check">Plan 결과 검토</li>
+          <li class="check">Design 체크리스트 수정</li>
+          <li class="check">각 단계 승인</li>
+        </ul>
+      </div>
+      <div class="card-border rounded-2xl p-6 ring-1 ring-brand-500/40">
+        <div class="flex items-center gap-2 mb-3">
+          <i data-lucide="fast-forward" class="w-5 h-5 text-brand-300"></i>
+          <h4 class="font-bold text-white">Plan 이후 자동</h4>
+          <span class="text-[10px] bg-brand-500 text-white px-2 py-0.5 rounded font-bold">추천</span>
+        </div>
+        <p class="text-sm text-white/60 leading-relaxed mb-3">Plan만 검토하고 나머지(Design→Do→Check→Act)는 자동.</p>
+        <ul class="text-xs text-white/50 space-y-1">
+          <li class="check">계획 한 번 읽고 OK</li>
+          <li class="check">나머지는 알아서</li>
+          <li class="check">결과만 확인</li>
+        </ul>
+      </div>
+      <div class="card-border rounded-2xl p-6">
+        <div class="flex items-center gap-2 mb-3">
+          <i data-lucide="zap" class="w-5 h-5 text-brand-300"></i>
+          <h4 class="font-bold text-white">완전 자동</h4>
+        </div>
+        <p class="text-sm text-white/60 leading-relaxed mb-3">티켓 제목만 쓰고 방치. 끝나면 macOS 알림이 뜹니다.</p>
+        <ul class="text-xs text-white/50 space-y-1">
+          <li class="check">제목 → 실행 → 끝</li>
+          <li class="check">알림으로 완료 확인</li>
+          <li class="check">PR 링크까지 준비</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 커밋 모드 -->
+    <div class="card-border rounded-2xl p-8 bg-ink-900/60">
+      <div class="flex items-start gap-4 mb-5">
+        <div class="w-11 h-11 rounded-xl bg-brand-500/15 text-brand-300 flex items-center justify-center shrink-0">
+          <i data-lucide="git-pull-request" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h4 class="font-bold text-white text-lg mb-1">끝나면 어디까지 갈지도 선택</h4>
+          <p class="text-sm text-white/60">티켓 옵션에서 Act 단계 깊이를 한 번에 정해두면, 이후엔 자동.</p>
+        </div>
+      </div>
+      <div class="grid md:grid-cols-4 gap-3 text-sm">
+        <div class="p-4 rounded-xl bg-ink-800 border border-white/5">
+          <div class="font-semibold text-white mb-1">None</div>
+          <div class="text-xs text-white/50">구현만. 커밋은 사람이.</div>
+        </div>
+        <div class="p-4 rounded-xl bg-ink-800 border border-white/5">
+          <div class="font-semibold text-white mb-1">Commit</div>
+          <div class="text-xs text-white/50">로컬 커밋까지.</div>
+        </div>
+        <div class="p-4 rounded-xl bg-ink-800 border border-white/5">
+          <div class="font-semibold text-white mb-1">Commit + Push</div>
+          <div class="text-xs text-white/50">원격까지 보내기.</div>
+        </div>
+        <div class="p-4 rounded-xl bg-brand-500/10 border border-brand-500/30">
+          <div class="font-semibold text-white mb-1 flex items-center gap-1">Commit + Push + PR <i data-lucide="sparkles" class="w-3 h-3 text-brand-300"></i></div>
+          <div class="text-xs text-white/60">PR 링크까지 준비 완료.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 워크플로우 예시 ═══════════════════════════ -->
+<section class="py-24">
+  <div class="max-w-5xl mx-auto px-6">
+    <div class="text-center mb-14">
+      <div class="inline-block text-xs font-bold uppercase tracking-widest text-brand-400 mb-3">Workflow</div>
+      <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight text-white">하루가 이렇게 바뀝니다.</h2>
+    </div>
+
+    <div class="space-y-5">
+      <div class="card-border rounded-2xl p-6 flex gap-4">
+        <div class="w-10 h-10 rounded-full bg-brand-500/20 text-brand-300 flex items-center justify-center font-bold shrink-0">1</div>
+        <div>
+          <h4 class="font-bold text-white mb-1">아침 9시</h4>
+          <p class="text-sm text-white/60">Jira 미해결 이슈 패널을 연다. 오늘 할 3개 티켓을 드래그해서 칸반으로.</p>
+        </div>
+      </div>
+      <div class="card-border rounded-2xl p-6 flex gap-4">
+        <div class="w-10 h-10 rounded-full bg-brand-500/20 text-brand-300 flex items-center justify-center font-bold shrink-0">2</div>
+        <div>
+          <h4 class="font-bold text-white mb-1">9시 5분</h4>
+          <p class="text-sm text-white/60">3개 티켓 모두 <strong class="text-white">"Plan 이후 자동"</strong> + <strong class="text-white">"Commit + Push + PR"</strong> 로 실행 클릭.</p>
+        </div>
+      </div>
+      <div class="card-border rounded-2xl p-6 flex gap-4">
+        <div class="w-10 h-10 rounded-full bg-brand-500/20 text-brand-300 flex items-center justify-center font-bold shrink-0">3</div>
+        <div>
+          <h4 class="font-bold text-white mb-1">9시 7~20분</h4>
+          <p class="text-sm text-white/60">Plan 3개 검토, "진행" 클릭. 나머지는 백그라운드로.</p>
+        </div>
+      </div>
+      <div class="card-border rounded-2xl p-6 flex gap-4">
+        <div class="w-10 h-10 rounded-full bg-brand-500/20 text-brand-300 flex items-center justify-center font-bold shrink-0">4</div>
+        <div>
+          <h4 class="font-bold text-white mb-1">10~12시</h4>
+          <p class="text-sm text-white/60">다른 업무하다가 macOS 알림 세 번. 모두 Review 컬럼에 있고 PR 링크가 달림.</p>
+        </div>
+      </div>
+      <div class="card-border rounded-2xl p-6 flex gap-4 ring-1 ring-brand-500/40">
+        <div class="w-10 h-10 rounded-full bg-brand-500 text-white flex items-center justify-center shrink-0">
+          <i data-lucide="check" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h4 class="font-bold text-white mb-1">점심 전</h4>
+          <p class="text-sm text-white/60">PR 3개 리뷰 → 머지. 오전에 티켓 3개 끝남. <strong class="text-brand-300">비결: Cockpit.</strong></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 설치 ═══════════════════════════ -->
+<section id="install" class="py-24 relative">
+  <div class="absolute inset-0 grid-bg opacity-40 pointer-events-none"></div>
+
+  <div class="relative max-w-5xl mx-auto px-6">
+    <div class="text-center mb-12">
+      <div class="inline-block text-xs font-bold uppercase tracking-widest text-brand-400 mb-3">Install</div>
+      <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight text-white">한 줄로 끝.</h2>
+      <p class="mt-4 text-lg text-white/60">사전 준비물 없습니다. Node.js도 자동으로.</p>
+    </div>
+
+    <!-- 추천: 원라이너 -->
+    <div class="card-border rounded-2xl p-6 md:p-8 bg-ink-900/60 shadow-card mb-8">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="text-[10px] font-bold uppercase tracking-widest bg-brand-500 text-white px-2 py-1 rounded">권장</span>
+        <h3 class="text-xl font-bold text-white">원클릭 설치 (macOS)</h3>
+      </div>
+      <div class="rounded-xl bg-ink-950 border border-white/5 p-4 pl-5 flex items-center gap-3">
+        <i data-lucide="terminal" class="w-4 h-4 text-brand-400 shrink-0"></i>
+        <code class="flex-1 font-mono text-sm text-white/90 break-all select-all">curl -fsSL https://github.com/myounghalee/cockpit/releases/latest/download/install-macos.sh | bash</code>
+        <button onclick="copyText('curl -fsSL https://github.com/myounghalee/cockpit/releases/latest/download/install-macos.sh | bash', this)"
+                class="copy-btn shrink-0 inline-flex items-center gap-1.5 text-xs font-medium bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-lg transition" data-copied="0">
+          <i data-lucide="copy" class="w-3.5 h-3.5 lbl"></i><span class="lbl">복사</span>
+          <i data-lucide="check" class="w-3.5 h-3.5 lbl-ok hidden"></i><span class="lbl-ok hidden">복사됨</span>
+        </button>
+      </div>
+      <ul class="mt-5 grid sm:grid-cols-2 gap-2 text-sm text-white/70">
+        <li class="check">아키텍처 자동 감지 (arm64 / x64)</li>
+        <li class="check">Node.js 없으면 nvm으로 자동 설치</li>
+        <li class="check"><code class="text-brand-300">/Applications/Cockpit.app</code> 자동 배치</li>
+        <li class="check">Gatekeeper 경고 자동 해제 (<code class="text-brand-300">xattr -cr</code>)</li>
+        <li class="check">설치 후 앱 자동 실행</li>
+        <li class="check">비밀번호 필요 없음</li>
+      </ul>
+    </div>
+
+    <!-- 대안: DMG 직접 -->
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="card-border rounded-2xl p-6">
+        <h4 class="font-bold text-white mb-1 flex items-center gap-2"><i data-lucide="download" class="w-4 h-4 text-brand-300"></i> DMG 직접 다운로드</h4>
+        <p class="text-sm text-white/60 mb-4">스크립트가 찜찜하면 Release 페이지에서 DMG 받아서 드래그.</p>
+        <a href="https://github.com/myounghalee/cockpit/releases/latest" target="_blank" rel="noopener"
+           class="inline-flex items-center gap-2 bg-white/10 hover:bg-white/15 border border-white/10 text-white text-sm px-4 py-2 rounded-lg transition">
+          Releases 페이지 <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+        </a>
+        <p class="mt-3 text-xs text-white/40">
+          ⚠️ "손상되었기 때문에 열 수 없습니다" 경고가 뜨면 터미널에서<br/>
+          <code class="text-brand-300 font-mono">xattr -cr /Applications/Cockpit.app</code>
+        </p>
+      </div>
+      <div class="card-border rounded-2xl p-6">
+        <h4 class="font-bold text-white mb-1 flex items-center gap-2"><i data-lucide="git-branch" class="w-4 h-4 text-brand-300"></i> 개발자 (소스로 실행)</h4>
+        <p class="text-sm text-white/60 mb-4">직접 clone 해서 수정하며 쓸 때.</p>
+        <pre class="text-xs font-mono text-white/80 bg-ink-950 border border-white/5 rounded-lg p-3 leading-relaxed overflow-x-auto">git clone https://github.com/myounghalee/cockpit.git
+cd cockpit
+./start.sh</pre>
+      </div>
+    </div>
+
+    <!-- 사후 경험 -->
+    <div class="mt-10 card-border rounded-2xl p-6 bg-ink-900/40">
+      <h4 class="font-bold text-white mb-3">설치 이후 경험</h4>
+      <div class="grid md:grid-cols-3 gap-4 text-sm text-white/70">
+        <div class="flex gap-3">
+          <span class="text-brand-400 font-bold">1</span>
+          <div>첫 실행 시 <em class="text-white">"Cockpit 소스를 설치하시겠습니까?"</em> 다이얼로그 → <strong class="text-white">"설치"</strong>.</div>
+        </div>
+        <div class="flex gap-3">
+          <span class="text-brand-400 font-bold">2</span>
+          <div><code class="text-brand-300">~/.cockpit-app</code>에 소스 자동 다운로드 (2-5분).</div>
+        </div>
+        <div class="flex gap-3">
+          <span class="text-brand-400 font-bold">3</span>
+          <div>이후엔 Spotlight / Launchpad에서 <strong class="text-white">"Cockpit"</strong> 검색 → 실행.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 상세 가이드 ═══════════════════════════ -->
+<section id="guide" class="py-24">
+  <div class="max-w-5xl mx-auto px-6">
+    <div class="text-center mb-12">
+      <div class="inline-block text-xs font-bold uppercase tracking-widest text-brand-400 mb-3">Guide</div>
+      <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight text-white">상세 가이드</h2>
+      <p class="mt-4 text-lg text-white/60">처음 쓰는 분은 위에서 아래로, 익숙한 분은 필요한 것만.</p>
+    </div>
+
+    <div class="space-y-3">
+
+      <!-- 1. 프로젝트 등록 -->
+      <details class="card-border rounded-2xl p-0 overflow-hidden" open>
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-brand-500/20 text-brand-300 flex items-center justify-center font-bold">1</span>
+            <span class="font-bold text-white">프로젝트 등록</span>
+          </div>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed space-y-3">
+          <ol class="list-decimal list-inside space-y-1">
+            <li>사이드바 <strong class="text-white">프로젝트</strong> 클릭 (<span class="kbd">⌃</span> <span class="kbd">1</span>).</li>
+            <li>우상단 <strong class="text-white">"새 프로젝트"</strong> → 로컬 폴더 선택.</li>
+            <li>그룹 분류·즐겨찾기 ★ 표시 가능.</li>
+            <li>프로젝트 카드 클릭 → 바로 <strong class="text-white">터미널 / 칸반 / Git</strong>으로.</li>
+          </ol>
+          <p class="text-xs text-white/50">💡 <strong>사이드바 하단 "Active" 배지</strong>로 활성 프로젝트 빠른 전환.</p>
+        </div>
+      </details>
+
+      <!-- 2. 칸반으로 티켓 만들기 -->
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-brand-500/20 text-brand-300 flex items-center justify-center font-bold">2</span>
+            <span class="font-bold text-white">티켓 만들기</span>
+          </div>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed space-y-3">
+          <ul class="list-disc list-inside space-y-1">
+            <li><strong class="text-white">"새 티켓"</strong> 버튼 또는 우측 <strong class="text-white">Jira 패널</strong>에서 미해결 이슈 임포트.</li>
+            <li>전체 프로젝트 보기에서도 프로젝트 선택 드롭다운으로 생성 가능.</li>
+            <li>티켓 옵션:
+              <ul class="list-disc list-inside ml-5 mt-1 text-white/60">
+                <li>PDCA 모드: <em>수동 / Plan 이후 자동 / 완전 자동</em></li>
+                <li>커밋 모드: <em>없음 / commit / commit+push / commit+push+PR</em></li>
+              </ul>
+            </li>
+            <li>드래그앤드롭으로 Backlog ↔ In Progress ↔ Review ↔ Done 이동.</li>
+          </ul>
+        </div>
+      </details>
+
+      <!-- 3. PDCA 실행 -->
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-brand-500/20 text-brand-300 flex items-center justify-center font-bold">3</span>
+            <span class="font-bold text-white">PDCA 실행 & 진행도 확인</span>
+          </div>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed space-y-3">
+          <ol class="list-decimal list-inside space-y-1">
+            <li>티켓 상세에서 <strong class="text-white">"실행"</strong> 클릭 → 백그라운드에서 Claude 실행 (터미널 안 열림).</li>
+            <li>우측 패널이 실시간 로그 / 단계별 진행도 표시.</li>
+            <li><strong class="text-white">Stages 카드</strong>: Plan / Design / Do / Check / Act 5단계. 완료된/현재 단계 클릭 시 해당 문서 탭 전환.</li>
+            <li><strong class="text-white">Checklist 카드</strong>: Do 단계의 구현 체크리스트. <code class="text-brand-300">- [x]</code>로 실시간 진행도.</li>
+            <li><strong class="text-white">Action Timeline</strong>: Claude가 실행한 도구(Read/Edit/Bash/Grep...) 순서대로.</li>
+          </ol>
+          <p class="text-xs text-white/50">💡 단계별 문서는 <code class="text-brand-300">~/.cockpit-app</code>에 저장되어 직접 읽을 수 있습니다.</p>
+        </div>
+      </details>
+
+      <!-- 4. 터미널 -->
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-brand-500/20 text-brand-300 flex items-center justify-center font-bold">4</span>
+            <span class="font-bold text-white">터미널 — 분할 & 영속화</span>
+          </div>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed space-y-3">
+          <ul class="list-disc list-inside space-y-1">
+            <li><span class="kbd">⌘</span> <span class="kbd">T</span> 새 탭 / <span class="kbd">⌘</span> <span class="kbd">W</span> 탭 닫기.</li>
+            <li><span class="kbd">⌘</span> <span class="kbd">1-9</span> 탭 전환 (Mac) / <span class="kbd">Alt</span> <span class="kbd">1-9</span> (기타).</li>
+            <li>패널 헤더의 <strong class="text-white">분할 버튼</strong>으로 좌우/상하 분할.</li>
+            <li>다른 메뉴 갔다 돌아와도 세션 <strong class="text-white">그대로 유지</strong>.</li>
+            <li>폰트 크기 설정에서 조정 가능.</li>
+          </ul>
+        </div>
+      </details>
+
+      <!-- 5. Git -->
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-brand-500/20 text-brand-300 flex items-center justify-center font-bold">5</span>
+            <span class="font-bold text-white">Git — 커밋부터 PR까지</span>
+          </div>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed space-y-3">
+          <ul class="list-disc list-inside space-y-1">
+            <li>커밋 그래프 (전체 / 현재 브랜치 토글).</li>
+            <li>파일별 스테이징 / 언스테이징 / 폐기 / <strong class="text-white">untracked도 diff</strong>.</li>
+            <li>Push / Pull / Fetch + Merge / Rebase / Abort.</li>
+            <li>Stash 저장·적용·삭제.</li>
+            <li><strong class="text-white">Quick Actions</strong>: 자주 쓰는 순서(예: Fetch → Pull --rebase → Push)를 버튼 하나로 엮기.</li>
+          </ul>
+        </div>
+      </details>
+
+      <!-- 6. 단축키 -->
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-brand-500/20 text-brand-300 flex items-center justify-center font-bold">6</span>
+            <span class="font-bold text-white">단축키 모음</span>
+          </div>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5">
+          <div class="grid sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-white/70">사이드바 토글</span><span><span class="kbd">⌘</span> <span class="kbd">S</span></span></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-white/70">프로젝트</span><span><span class="kbd">⌃</span> <span class="kbd">1</span></span></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-white/70">터미널</span><span><span class="kbd">⌃</span> <span class="kbd">2</span></span></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-white/70">칸반</span><span><span class="kbd">⌃</span> <span class="kbd">3</span></span></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-white/70">Git</span><span><span class="kbd">⌃</span> <span class="kbd">4</span></span></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-white/70">설정</span><span><span class="kbd">⌃</span> <span class="kbd">5</span></span></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-white/70">터미널 새 탭</span><span><span class="kbd">⌘</span> <span class="kbd">T</span></span></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-white/70">터미널 탭 닫기</span><span><span class="kbd">⌘</span> <span class="kbd">W</span></span></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-white/70">터미널 탭 1~9 전환</span><span><span class="kbd">⌘</span> <span class="kbd">1-9</span></span></div>
+            <div class="flex items-center justify-between py-1 border-b border-white/5"><span class="text-white/70">외부 에디터 열기</span><span class="text-white/50 text-xs">프로젝트 카드 → …</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- 7. 설정 -->
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-brand-500/20 text-brand-300 flex items-center justify-center font-bold">7</span>
+            <span class="font-bold text-white">설정 (Jira / 폰트 / 외부 에디터)</span>
+          </div>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed space-y-3">
+          <ul class="list-disc list-inside space-y-1">
+            <li><strong class="text-white">Jira 연동</strong>: <code class="text-brand-300">/settings</code> → Host, Email, API Token 입력.
+              <br/>토큰 생성: <a href="https://id.atlassian.com/manage-profile/security/api-tokens" class="text-brand-300 hover:underline" target="_blank" rel="noopener">Atlassian → Security → API tokens</a>.
+            </li>
+            <li><strong class="text-white">폰트 크기</strong>: 터미널 / 마크다운 각각 조절.</li>
+            <li><strong class="text-white">외부 에디터</strong>: VS Code / Cursor / WebStorm / IntelliJ / Sublime 자동 감지. 프로젝트 "···" 메뉴에서 원클릭.</li>
+          </ul>
+        </div>
+      </details>
+
+      <!-- 8. 업데이트 -->
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-brand-500/20 text-brand-300 flex items-center justify-center font-bold">8</span>
+            <span class="font-bold text-white">자동 업데이트</span>
+          </div>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed space-y-3">
+          <ul class="list-disc list-inside space-y-1">
+            <li>앱 실행 시 백그라운드에서 최신 소스 체크 → 받아서 빌드.</li>
+            <li>준비되면 상단에 배너 표시 → <strong class="text-white">"지금 적용 (재시작)"</strong> 클릭.</li>
+            <li>업데이트 중에도 <strong class="text-white">작업은 그대로 진행</strong>. 앱 블록되지 않음.</li>
+          </ul>
+        </div>
+      </details>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 기술 스택 ═══════════════════════════ -->
+<section class="py-20">
+  <div class="max-w-5xl mx-auto px-6">
+    <div class="text-center mb-10">
+      <div class="inline-block text-xs font-bold uppercase tracking-widest text-brand-400 mb-3">Built on</div>
+      <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white">탄탄한 기술 스택.</h2>
+    </div>
+    <div class="flex flex-wrap justify-center gap-2">
+      <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80">Next.js 15</span>
+      <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80">React 19</span>
+      <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80">TypeScript</span>
+      <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80">Electron 41</span>
+      <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80">Tailwind CSS 4</span>
+      <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80">Prisma + SQLite</span>
+      <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80">xterm.js + node-pty</span>
+      <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80">@dnd-kit</span>
+      <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80">Zustand</span>
+      <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80">React Query</span>
+      <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80">WebSocket (ws)</span>
+      <span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-sm text-white/80">Claude Code CLI</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ FAQ ═══════════════════════════ -->
+<section id="faq" class="py-24">
+  <div class="max-w-4xl mx-auto px-6">
+    <div class="text-center mb-12">
+      <div class="inline-block text-xs font-bold uppercase tracking-widest text-brand-400 mb-3">FAQ</div>
+      <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight text-white">자주 묻는 질문</h2>
+    </div>
+
+    <div class="space-y-3">
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <span class="font-semibold text-white">Claude Code CLI도 따로 설치해야 하나요?</span>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed">
+          네. Cockpit은 로컬에 설치된 <code class="text-brand-300">claude</code> 명령을 호출하는 구조입니다.
+          Anthropic Claude Code 설치 후 <code class="text-brand-300">claude --version</code>이 나오면 준비 끝.
+        </div>
+      </details>
+
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <span class="font-semibold text-white">"손상되었기 때문에 열 수 없습니다"는 왜 뜨나요?</span>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed">
+          Apple Developer 인증서가 없는 앱에 macOS가 붙이는 quarantine 속성 때문입니다. 원클릭 설치 스크립트는 이걸 자동으로 제거합니다.
+          DMG를 직접 받은 경우 터미널에서 <code class="text-brand-300">xattr -cr /Applications/Cockpit.app</code> 실행.
+        </div>
+      </details>
+
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <span class="font-semibold text-white">Windows / Linux는 언제 되나요?</span>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed">
+          현재 공식 배포는 macOS(arm64/x64) 전용입니다. Windows PowerShell 설치 스크립트(<code class="text-brand-300">install.ps1</code>)가 저장소에 있어 clone 후 실행은 가능.
+        </div>
+      </details>
+
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <span class="font-semibold text-white">어떤 데이터가 어디 저장되나요?</span>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed space-y-2">
+          <p>소스와 DB는 전부 로컬:</p>
+          <ul class="list-disc list-inside space-y-1 text-white/60">
+            <li>앱 번들: <code class="text-brand-300">/Applications/Cockpit.app</code></li>
+            <li>실제 소스(자동 업데이트): <code class="text-brand-300">~/.cockpit-app</code></li>
+            <li>DB: <code class="text-brand-300">~/.cockpit-app/prisma/dev.db</code> (SQLite)</li>
+            <li>Jira 토큰: OS 안전 저장소</li>
+          </ul>
+          <p>외부 전송은 Claude CLI와 Jira API 호출뿐입니다.</p>
+        </div>
+      </details>
+
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <span class="font-semibold text-white">완전히 지우려면?</span>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed">
+          터미널에서:
+          <pre class="mt-2 text-xs font-mono bg-ink-950 border border-white/5 rounded-lg p-3">rm -rf /Applications/Cockpit.app ~/.cockpit-app</pre>
+        </div>
+      </details>
+
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <span class="font-semibold text-white">nvm 설치가 싫은데요?</span>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed">
+          이미 Node.js 20+ 이 설치되어 있으면 nvm을 건드리지 않습니다. <code class="text-brand-300">command -v node</code>로 버전이 확인되면 그걸 씁니다.
+        </div>
+      </details>
+
+      <details class="card-border rounded-2xl p-0 overflow-hidden">
+        <summary class="p-5 flex items-center justify-between hover:bg-white/5 transition">
+          <span class="font-semibold text-white">Spotlight에서 "Cockpit mac-arm64" 같은 게 같이 뜨는데요?</span>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-white/40 chev"></i>
+        </summary>
+        <div class="px-5 pb-5 text-sm text-white/70 leading-relaxed">
+          과거 개발 빌드의 <code class="text-brand-300">dist-app/mac-arm64/Cockpit.app</code>이 색인된 흔적입니다.
+          저장소 자체는 <code class="text-brand-300">dist-app.noindex/</code>로 바뀌어 더 이상 색인되지 않습니다. 이미 떠 있다면 해당 폴더를 삭제하세요.
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ CTA FINAL ═══════════════════════════ -->
+<section class="py-24">
+  <div class="max-w-4xl mx-auto px-6">
+    <div class="card-border rounded-3xl p-10 md:p-14 bg-gradient-to-br from-ink-800 to-ink-900 text-center shadow-glow">
+      <h2 class="text-3xl md:text-5xl font-extrabold tracking-tight text-white mb-4">
+        이제 당신 차례.
+      </h2>
+      <p class="text-lg text-white/60 mb-8 max-w-2xl mx-auto">
+        2분 설치. 처음 티켓 실행은 5분. 오후부터는 달라진 하루를.
+      </p>
+
+      <div class="max-w-2xl mx-auto card-border rounded-xl p-1 mb-6">
+        <div class="flex items-center gap-3 bg-ink-950 rounded-lg px-4 py-3">
+          <i data-lucide="terminal" class="w-4 h-4 text-brand-400 shrink-0"></i>
+          <code class="flex-1 font-mono text-sm text-white/90 break-all select-all text-left">curl -fsSL https://github.com/myounghalee/cockpit/releases/latest/download/install-macos.sh | bash</code>
+          <button onclick="copyText('curl -fsSL https://github.com/myounghalee/cockpit/releases/latest/download/install-macos.sh | bash', this)"
+                  class="copy-btn shrink-0 inline-flex items-center gap-1.5 text-xs font-medium bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded-lg transition" data-copied="0">
+            <i data-lucide="copy" class="w-3.5 h-3.5 lbl"></i><span class="lbl">복사</span>
+            <i data-lucide="check" class="w-3.5 h-3.5 lbl-ok hidden"></i><span class="lbl-ok hidden">복사됨</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap justify-center gap-3">
+        <a href="https://github.com/myounghalee/cockpit/releases/latest" target="_blank" rel="noopener"
+           class="inline-flex items-center gap-2 bg-white text-ink-900 hover:bg-white/90 font-semibold px-5 py-3 rounded-xl transition shadow-lg">
+          <i data-lucide="download" class="w-4 h-4"></i> DMG 다운로드
+        </a>
+        <a href="https://github.com/myounghalee/cockpit" target="_blank" rel="noopener"
+           class="inline-flex items-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium px-5 py-3 rounded-xl transition">
+          <i data-lucide="github" class="w-4 h-4"></i> 저장소 둘러보기
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ FOOTER ═══════════════════════════ -->
+<footer class="py-10 border-t border-white/5">
+  <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-white/40">
+    <div class="flex items-center gap-2">
+      <img src="./assets/logo.svg" alt="" class="w-5 h-5 rounded" />
+      <span>Cockpit · MIT License · Made with ❤️</span>
+    </div>
+    <div class="flex items-center gap-6">
+      <a href="https://github.com/myounghalee/cockpit" class="hover:text-white transition" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/myounghalee/cockpit/releases" class="hover:text-white transition" target="_blank" rel="noopener">Releases</a>
+      <a href="https://github.com/myounghalee/cockpit/issues" class="hover:text-white transition" target="_blank" rel="noopener">Issues</a>
+    </div>
+  </div>
+</footer>
+
+<!-- ═══════════════════════════ JS ═══════════════════════════ -->
+<script>
+  // 아이콘 렌더
+  lucide.createIcons();
+
+  // Install command 복사
+  function copyInstall(btn) {
+    const text = document.getElementById('install-cmd').innerText.trim();
+    copyText(text, btn);
+  }
+  function copyText(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+      btn.dataset.copied = "1";
+      setTimeout(() => { btn.dataset.copied = "0"; }, 1800);
+    });
+  }
+</script>
+</body>
+</html>

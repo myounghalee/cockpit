@@ -27,6 +27,10 @@ interface FileResponse {
   oversize: boolean;
   size: number;
   content?: string;
+  // 이미지 파일일 때 서버가 base64 dataUrl로 실어서 보내줌
+  image?: boolean;
+  dataUrl?: string;
+  mimeType?: string;
   name: string;
   absolutePath: string;
 }
@@ -170,6 +174,12 @@ export function FileViewerPanel({
           <div className="p-6 text-sm text-[var(--color-danger)]">{error}</div>
         ) : !data ? null : data.oversize ? (
           <OversizePlaceholder size={data.size} onOpen={openInOS} />
+        ) : data.image && data.dataUrl ? (
+          <ImageContent
+            dataUrl={data.dataUrl}
+            name={data.name}
+            size={data.size}
+          />
         ) : data.binary ? (
           <BinaryPlaceholder onOpen={openInOS} />
         ) : isMarkdown && renderMode === "rendered" ? (
@@ -230,6 +240,31 @@ function TextContent({ content }: { content: string }) {
         </tbody>
       </table>
     </pre>
+  );
+}
+
+function ImageContent({
+  dataUrl,
+  name,
+  size,
+}: {
+  dataUrl: string;
+  name: string;
+  size: number;
+}) {
+  const kb = (size / 1024).toFixed(1);
+  return (
+    <div className="flex flex-col items-center justify-start p-6 gap-3 bg-[repeating-conic-gradient(var(--color-surface)_0%_25%,var(--color-background)_0%_50%)_50%/20px_20px]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={dataUrl}
+        alt={name}
+        className="max-w-full max-h-[75vh] object-contain rounded shadow-lg"
+      />
+      <div className="text-xs text-[var(--color-foreground-dim)] font-mono">
+        {name} · {kb} KB
+      </div>
+    </div>
   );
 }
 

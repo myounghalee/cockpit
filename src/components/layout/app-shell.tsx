@@ -21,15 +21,14 @@ const TerminalWorkspace = dynamic(
   { ssr: false },
 );
 
-/** Ctrl+숫자 단축키 매핑 — 메뉴 전환 */
+/** Ctrl+숫자 단축키 매핑 — 메인 메뉴 전환 (Settings는 Cmd/Ctrl+, 로 분리) */
 const NAV_SHORTCUTS: Record<string, string> = {
   "1": "/projects",
   "2": "/terminal",
   "3": "/kanban",
   "4": "/git",
-  "5": "/settings",
-  "6": "/memo",
-  "7": "/insights",
+  "5": "/memo",
+  "6": "/insights",
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -47,7 +46,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // 단축키:
   //  - Cmd/Ctrl + S       → 사이드바 토글 (어디서나)
   //  - Cmd/Ctrl + Shift+N → 빠른 메모 다이얼로그 (어디서나)
-  //  - Ctrl     + 1~6     → 상단 메뉴 전환 (Mac/Win 공통, metaKey 아님)
+  //  - Cmd/Ctrl + , / 0   → Settings (macOS/VSCode 관례)
+  //  - Ctrl     + 1~6     → 메인 메뉴 전환 (Mac/Win 공통, metaKey 아님)
   //  - Cmd      + 1~9     → 현재 터미널 라우트에서 터미널 탭 전환 (Mac)
   //  - Alt      + 1~9     → 동일하게 터미널 탭 전환 (Windows/Linux)
   useEffect(() => {
@@ -61,6 +61,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ) {
         e.preventDefault();
         openQuickMemo();
+        return;
+      }
+
+      // Cmd/Ctrl + , (macOS Preferences 관례) 또는 Cmd/Ctrl + 0 → Settings
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        (e.key === "," || e.key === "0")
+      ) {
+        e.preventDefault();
+        router.push("/settings");
         return;
       }
 

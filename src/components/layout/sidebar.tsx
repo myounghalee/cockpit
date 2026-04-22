@@ -21,22 +21,31 @@ interface NavItem {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string; size?: number }>;
-  shortcut: string;
+  /** 메인 nav는 ⌃+숫자. Settings는 별도 (shortcutLabel로 표시) */
+  shortcut?: string;
+  shortcutLabel?: string;
 }
 
+// 메인 내비게이션 — ⌃+숫자로 접근. 작업 빈도 높은 순서.
 const NAV_ITEMS: NavItem[] = [
   { href: "/projects", label: "Projects", icon: FolderKanban, shortcut: "1" },
   { href: "/terminal", label: "Terminal", icon: TerminalIcon, shortcut: "2" },
   { href: "/kanban", label: "Kanban", icon: KanbanSquare, shortcut: "3" },
   { href: "/git", label: "Git", icon: GitBranch, shortcut: "4" },
-  { href: "/settings", label: "Settings", icon: SettingsIcon, shortcut: "5" },
-  { href: "/memo", label: "Memo", icon: StickyNote, shortcut: "6" },
-  { href: "/insights", label: "Insights", icon: BarChart3, shortcut: "7" },
+  { href: "/memo", label: "Memo", icon: StickyNote, shortcut: "5" },
+  { href: "/insights", label: "Insights", icon: BarChart3, shortcut: "6" },
 ];
 
+// 하단 독립 항목 — Settings는 macOS/Win 공통 관례(⌘, / Ctrl+,)에 맞춰 분리.
 const IS_MAC =
   typeof navigator !== "undefined" &&
   navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+const SETTINGS_ITEM: NavItem = {
+  href: "/settings",
+  label: "Settings",
+  icon: SettingsIcon,
+  shortcutLabel: IS_MAC ? "⌘," : "Ctrl+,",
+};
 // 메뉴 전환 — Mac은 ⌃ 기호(Control), Win/Linux는 "Ctrl" 텍스트
 const MOD_KEY = IS_MAC ? "⌃" : "Ctrl";
 // 사이드바 토글(⌘S / Ctrl+S)용 표시
@@ -91,48 +100,32 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* 내비게이션 */}
+      {/* 내비게이션 (메인) */}
       <nav className="flex-1 p-2 flex flex-col gap-1 overflow-y-auto">
-        {NAV_ITEMS.map((item) => {
-          const active =
-            pathname === item.href || pathname.startsWith(item.href + "/");
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
-                active
-                  ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                  : "text-[var(--color-foreground-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-foreground)]",
-                collapsed && "justify-center px-0",
-              )}
-              title={
-                collapsed
-                  ? `${item.label} (${
-                      IS_MAC
-                        ? `${MOD_KEY}${item.shortcut}`
-                        : `${MOD_KEY}+${item.shortcut}`
-                    })`
-                  : undefined
-              }
-            >
-              <Icon size={18} className="flex-shrink-0" />
-              {!collapsed && (
-                <>
-                  <span className="flex-1">{item.label}</span>
-                  <kbd className="text-[10px] text-[var(--color-foreground-dim)] font-mono">
-                    {IS_MAC
-                      ? `${MOD_KEY}${item.shortcut}`
-                      : `${MOD_KEY}+${item.shortcut}`}
-                  </kbd>
-                </>
-              )}
-            </Link>
-          );
-        })}
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.href}
+            item={item}
+            active={
+              pathname === item.href ||
+              pathname.startsWith(item.href + "/")
+            }
+            collapsed={collapsed}
+          />
+        ))}
       </nav>
+
+      {/* 하단 독립 — Settings */}
+      <div className="px-2 pt-2 pb-1 border-t border-[var(--color-border)]">
+        <NavLink
+          item={SETTINGS_ITEM}
+          active={
+            pathname === SETTINGS_ITEM.href ||
+            pathname.startsWith(SETTINGS_ITEM.href + "/")
+          }
+          collapsed={collapsed}
+        />
+      </div>
 
       {/* 활성 프로젝트 배지 */}
       <ActiveProjectBadge collapsed={collapsed} />
@@ -144,5 +137,50 @@ export function Sidebar() {
         </div>
       )}
     </aside>
+  );
+}
+
+/** 메인 nav 링크 하나 — collapsed / 단축키 라벨 처리를 공유. */
+function NavLink({
+  item,
+  active,
+  collapsed,
+}: {
+  item: NavItem;
+  active: boolean;
+  collapsed: boolean;
+}) {
+  const Icon = item.icon;
+  const shortcutText = item.shortcutLabel
+    ? item.shortcutLabel
+    : item.shortcut
+      ? IS_MAC
+        ? `${MOD_KEY}${item.shortcut}`
+        : `${MOD_KEY}+${item.shortcut}`
+      : undefined;
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+        active
+          ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+          : "text-[var(--color-foreground-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-foreground)]",
+        collapsed && "justify-center px-0",
+      )}
+      title={collapsed && shortcutText ? `${item.label} (${shortcutText})` : undefined}
+    >
+      <Icon size={18} className="flex-shrink-0" />
+      {!collapsed && (
+        <>
+          <span className="flex-1">{item.label}</span>
+          {shortcutText && (
+            <kbd className="text-[10px] text-[var(--color-foreground-dim)] font-mono">
+              {shortcutText}
+            </kbd>
+          )}
+        </>
+      )}
+    </Link>
   );
 }

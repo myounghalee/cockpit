@@ -39,7 +39,8 @@ export function MemoEditor({
   const [title, setTitle] = useState(memo.title);
   const [content, setContent] = useState(memo.content);
   const [tags, setTags] = useState(memo.tags);
-  const [preview, setPreview] = useState(false);
+  // 기본은 미리보기 모드 — 편집하려면 프리뷰 영역 더블클릭 or 툴바 버튼
+  const [preview, setPreview] = useState(true);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(
     "idle",
   );
@@ -47,15 +48,35 @@ export function MemoEditor({
   const update = useUpdateMemo();
   const del = useDeleteMemo();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // 메모가 바뀌면(다른 메모 선택) 로컬 상태도 리셋
+  // 메모가 바뀌면(다른 메모 선택) 로컬 상태도 리셋 — 다시 미리보기로
   useEffect(() => {
     setTitle(memo.title);
     setContent(memo.content);
     setTags(memo.tags);
-    setPreview(false);
+    setPreview(true);
     setSaveState("idle");
   }, [memo.id, memo.title, memo.content, memo.tags]);
+
+  // 편집 모드로 진입하면 textarea에 포커스
+  useEffect(() => {
+    if (!preview && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [preview]);
+
+  // 프리뷰 영역에서 체크박스 클릭 시 N번째 [ ] ↔ [x] 토글
+  function toggleTaskCheckbox(index: number) {
+    let i = 0;
+    let changed = false;
+    const next = content.replace(/- \[( |x|X)\]/g, (match, state) => {
+      if (i++ !== index) return match;
+      changed = true;
+      return state.trim() === "" ? "- [x]" : "- [ ]";
+    });
+    if (changed) setContent(next);
+  }
 
   // 변경 시 1초 debounce 후 자동 저장
   useEffect(() => {
@@ -227,27 +248,54 @@ export function MemoEditor({
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
         {preview ? (
-          <article
-            className={cn(
-              "prose prose-sm max-w-none",
-              "prose-headings:text-[var(--color-foreground)] prose-headings:font-semibold",
-              "prose-p:text-[var(--color-foreground)]",
-              "prose-strong:text-[var(--color-foreground)]",
-              "prose-code:text-[var(--color-accent)] prose-code:bg-[var(--color-surface-hover)] prose-code:px-1 prose-code:rounded",
-              "prose-a:text-[var(--color-accent)]",
-              "prose-li:text-[var(--color-foreground)]",
-              "prose-blockquote:text-[var(--color-foreground-muted)] prose-blockquote:border-[var(--color-border)]",
-            )}
-          >
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {content || "*내용 없음*"}
-            </ReactMarkdown>
-          </article>
+          (() => {
+            // ReactMarkdown은 소스 순서대로 input 컴포넌트를 호출하므로
+            // 렌더마다 새 closure 카운터로 Nth checkbox 를 추적
+            let checkboxIdx = 0;
+            return (
+              <article
+                className="markdown-body text-sm text-[var(--color-foreground)] cursor-text"
+                onDoubleClick={() => setPreview(false)}
+                title="더블클릭하면 편집 모드로 전환돼요"
+              >
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    input: ({ node: _node, ...props }) => {
+                      if (props.type !== "checkbox") {
+                        return <input {...props} />;
+                      }
+                      const idx = checkboxIdx++;
+                      // remark-gfm이 disabled를 기본 true로 주는데, 클릭 가능하게
+                      return (
+                        <input
+                          {...props}
+                          disabled={false}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => toggleTaskCheckbox(idx)}
+                        />
+                      );
+                    },
+                  }}
+                >
+                  {content || "*내용 없음 — 더블클릭해서 편집*"}
+                </ReactMarkdown>
+              </article>
+            );
+          })()
         ) : (
           <textarea
+            ref={textareaRef}
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="마크다운으로 작성하세요. 체크리스트는 - [ ] / - [x]"
+            onKeyDown={(e) => {
+              // Esc 로 미리보기 복귀 (저장은 기존 debounce 가 처리)
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setPreview(true);
+              }
+            }}
+            placeholder="마크다운으로 작성하세요. 체크리스트는 - [ ] / - [x]. Esc 로 미리보기"
             className={cn(
               "w-full h-full min-h-[300px] resize-none bg-transparent text-sm leading-relaxed",
               "text-[var(--color-foreground)] placeholder:text-[var(--color-foreground-dim)]",

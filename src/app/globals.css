@@ -222,8 +222,29 @@ code {
   border-top: 1px solid var(--color-border);
   margin: 1.5em 0;
 }
+.markdown-body ul.contains-task-list,
+.markdown-body ul.contains-task-list ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.5em;
+}
+.markdown-body li.task-list-item {
+  margin: 0.2em 0;
+}
 .markdown-body input[type="checkbox"] {
-  margin-right: 0.4em;
+  margin-right: 0.5em;
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+.markdown-body input[type="checkbox"]:disabled {
+  cursor: default;
+}
+/* 완료된 task 는 dim */
+.markdown-body li.task-list-item:has(> input[type="checkbox"]:checked) {
+  color: var(--color-foreground-muted);
+  text-decoration: line-through;
 }
 
 /* ─── 터미널 탭 실행중 표시 (깜빡임) ─── */

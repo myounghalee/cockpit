@@ -16,12 +16,13 @@ export const useActiveProjectStore = create<ActiveProjectState>()(
     (set) => ({
       activeProjectId: null,
       activeProjectPath: null,
-      explicitlyUnset: false,
+      // 기본값 true — 신규 사용자는 "전체 보기"로 시작.
+      // 특정 프로젝트 선택 시 false로 전환, "활성 해제" 시 다시 true.
+      explicitlyUnset: true,
       setActive: (id, path) =>
         set({
           activeProjectId: id,
           activeProjectPath: path ?? null,
-          // null로 설정 → 사용자 의사로 해제. 특정 id → 다시 자동선택 허용.
           explicitlyUnset: id === null,
         }),
     }),

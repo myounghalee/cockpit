@@ -24,27 +24,22 @@ export function ActiveProjectBadge({ collapsed }: Props) {
   const { data } = useProjects();
   const activeId = useActiveProjectStore((s) => s.activeProjectId);
   const setActive = useActiveProjectStore((s) => s.setActive);
-  const explicitlyUnset = useActiveProjectStore((s) => s.explicitlyUnset);
 
-  // stale ID 정리 + 최초 로드 시 기본값 선택.
-  // 사용자가 "활성 해제"를 누른 상태(explicitlyUnset=true)면 자동 재선택하지 않음.
+  // 자동 "첫 프로젝트 선택" 로직은 제거.
+  // 디폴트는 전체 보기 — 사용자가 드롭다운에서 명시적으로 골라야 Active 상태가 된다.
+  // 이 effect는 오직 stale ID 정리(삭제된 프로젝트를 가리키는 경우 해제) + path 동기화만 담당.
   useEffect(() => {
     if (!data) return;
-    if (data.projects.length === 0) {
-      if (activeId) setActive(null, null);
-      return;
-    }
-    if (explicitlyUnset) return; // 전체 보기 모드 유지
+    if (!activeId) return; // 이미 전체 보기면 건드리지 않음
     const exists = data.projects.find((p) => p.id === activeId);
     if (!exists) {
-      const preferred =
-        data.projects.find((p) => p.isFavorite) ?? data.projects[0];
-      setActive(preferred.id, preferred.path);
-    } else if (exists.path !== useActiveProjectStore.getState().activeProjectPath) {
-      // path 변경 감지 시 동기화
+      setActive(null, null);
+    } else if (
+      exists.path !== useActiveProjectStore.getState().activeProjectPath
+    ) {
       setActive(exists.id, exists.path);
     }
-  }, [data, activeId, setActive, explicitlyUnset]);
+  }, [data, activeId, setActive]);
 
   const active = data?.projects.find((p) => p.id === activeId) ?? null;
 

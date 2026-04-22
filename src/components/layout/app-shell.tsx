@@ -130,7 +130,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--color-background)] text-[var(--color-foreground)]">
       <Sidebar />
-      <main className="flex-1 min-w-0 min-h-0 relative flex flex-col">
+      <main className="flex-1 min-w-0 min-h-0 relative flex flex-col focus:outline-none focus-visible:outline-none">
         <UpdateBanner />
         {/* 페이지 컨텐츠 — 터미널 라우트일 때는 숨김 */}
         <div

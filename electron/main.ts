@@ -12,6 +12,19 @@ const execFileAsync = promisify(execFile);
 // 앱 이름 및 Bundle ID (macOS 알림 센터/Launchpad 등록에 사용)
 app.setName("Cockpit");
 
+// 단일 인스턴스 락 — 이미 실행 중인 Cockpit이 있으면 그 창을 포커스하고 종료.
+// 복수 인스턴스가 동시에 떠서 포트 롤오버 → localStorage 파편화되는 문제 방지.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  process.exit(0);
+}
+app.on("second-instance", () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
 // ─── 테마 연동 ────────────────────────────────────────────────
 // 앱 창 배경색(= macOS 타이틀바 색)을 라이트/다크에 맞춰 동적 변경.
 // renderer의 ThemeStore가 사용자 선택("system" | "light" | "dark")을
@@ -148,6 +161,73 @@ function writeSavedPort(port: number): void {
 }
 
 /**
+ * 이전 Cockpit 실행에서 남은 고아 서버 프로세스를 찾아 정리.
+ * Electron이 강제종료되면 spawn한 node 자식이 살아남아 포트를 붙잡고 있음.
+ * 이 상태에서 다시 실행하면 findFreePort가 다른 포트로 튀어 localStorage가
+ * 파편화됨. 시작 시 우리 서버(ROOT/server.ts) 만 정확히 식별해 제거.
+ */
+async function killStaleCockpitServers(): Promise<void> {
+  const marker = path.join(ROOT, "server.ts");
+  try {
+    const { stdout } = await execFileAsync("lsof", [
+      "-nP",
+      "-iTCP",
+      "-sTCP:LISTEN",
+      "-t",
+    ]);
+    const pids = [
+      ...new Set(
+        stdout
+          .split("\n")
+          .map((s) => Number(s.trim()))
+          .filter((n) => Number.isFinite(n) && n > 0 && n !== process.pid),
+      ),
+    ];
+    for (const pid of pids) {
+      let cmd = "";
+      try {
+        const { stdout: out } = await execFileAsync("ps", [
+          "-p",
+          String(pid),
+          "-o",
+          "command=",
+        ]);
+        cmd = out;
+      } catch {
+        continue; // 프로세스 이미 종료됨
+      }
+      if (!cmd.includes(marker)) continue; // 우리 서버 아님 — 건드리지 않음
+      console.log(`[cockpit] stale server 발견: pid=${pid} → SIGTERM`);
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        continue;
+      }
+      // 최대 1.5초 대기, 살아있으면 SIGKILL
+      for (let waited = 0; waited < 1500; waited += 150) {
+        await new Promise((r) => setTimeout(r, 150));
+        try {
+          process.kill(pid, 0); // 생사 확인
+        } catch {
+          // 죽음
+          console.log(`[cockpit] pid=${pid} 정상 종료`);
+          break;
+        }
+      }
+      try {
+        process.kill(pid, 0);
+        process.kill(pid, "SIGKILL");
+        console.log(`[cockpit] pid=${pid} SIGKILL`);
+      } catch {
+        // 이미 죽음 — OK
+      }
+    }
+  } catch {
+    // lsof 없거나 권한 문제 — 무시하고 기존 로직으로 진행
+  }
+}
+
+/**
  * 포트 선택 우선순위:
  * 1. 저장된 이전 포트 (빈 경우)
  * 2. preferred 포트가 최대 10초 내 풀리면 사용
@@ -254,6 +334,8 @@ function startServer(): void {
       PORT: String(PORT),
       HOST: "127.0.0.1",
       NODE_ENV: app.isPackaged ? "production" : "development",
+      // 서버가 부모(Electron) 생사를 감시해 고아화되면 자동 종료하도록
+      COCKPIT_PARENT_PID: String(process.pid),
     },
     stdio: ["ignore", "pipe", "pipe"],
     shell: process.platform === "win32",
@@ -685,6 +767,9 @@ app.whenReady().then(async () => {
     return;
   }
 
+  // 이전 실행에서 남은 고아 서버 정리 (우리 서버만 정확히 식별해 제거)
+  await killStaleCockpitServers();
+
   // 빈 포트 먼저 확보 — 저장된 포트 우선, 8282 대기, 8283~8302 시도
   PORT = await findFreePort(8282);
   writeSavedPort(PORT);
@@ -729,8 +814,23 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  if (serverProcess && !serverProcess.killed) {
-    serverProcess.kill("SIGTERM");
+  const child = serverProcess;
+  if (child && !child.killed) {
     serverProcess = null;
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      // ignore
+    }
+    // 2초 내 안 죽으면 SIGKILL (자식이 응답 없이 매달려 있을 수 있음)
+    setTimeout(() => {
+      try {
+        if (child.exitCode === null && child.pid !== undefined) {
+          process.kill(child.pid, "SIGKILL");
+        }
+      } catch {
+        // already dead
+      }
+    }, 2000);
   }
 });

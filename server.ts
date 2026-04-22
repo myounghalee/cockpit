@@ -28,6 +28,24 @@ for (const signal of ["SIGINT", "SIGTERM", "exit"] as const) {
   });
 }
 
+// 부모(Electron) 생사 감시 — Electron이 SIGKILL 등으로 크래시해도 자식이
+// 고아화되어 살아남지 않도록, 3초마다 부모 PID 생존 확인 후 자동 종료.
+// macOS/Linux 모두 process.kill(pid, 0) 으로 존재 여부 확인 가능.
+const parentPidRaw = Number(process.env.COCKPIT_PARENT_PID);
+if (Number.isFinite(parentPidRaw) && parentPidRaw > 0) {
+  setInterval(() => {
+    try {
+      process.kill(parentPidRaw, 0);
+    } catch {
+      console.log(
+        `[cockpit] parent (pid=${parentPidRaw}) 사라짐 — 서버 종료`,
+      );
+      ptyManager.disposeAll();
+      process.exit(0);
+    }
+  }, 3000).unref();
+}
+
 async function main() {
   await app.prepare();
 

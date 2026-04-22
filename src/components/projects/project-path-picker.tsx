@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import * as DropdownPrimitive from "@radix-ui/react-dropdown-menu";
 import {
   ChevronRight,
@@ -22,6 +22,9 @@ interface ProjectPathPickerProps {
   defaultDescription?: string;
   align?: "start" | "center" | "end";
   side?: "top" | "right" | "bottom" | "left";
+  /** 외부에서 open 상태 제어 (단축키 등) — 미지정 시 내부 state 자체 사용 */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function ProjectPathPicker({
@@ -31,8 +34,16 @@ export function ProjectPathPicker({
   defaultDescription,
   align = "start",
   side = "bottom",
+  open: controlledOpen,
+  onOpenChange,
 }: ProjectPathPickerProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (v: boolean) => {
+    if (!isControlled) setInternalOpen(v);
+    onOpenChange?.(v);
+  };
   const [query, setQuery] = useState("");
   const { data } = useProjects();
 
@@ -55,6 +66,58 @@ export function ProjectPathPicker({
     setQuery("");
   };
 
+  // 키보드 네비: 검색 input ↔ 항목 버튼들 사이 ↑↓ 이동, Enter로 선택
+  const listRef = useRef<HTMLDivElement>(null);
+  const focusItemAt = (idx: number) => {
+    if (!listRef.current) return;
+    const items = Array.from(
+      listRef.current.querySelectorAll<HTMLButtonElement>(
+        "button[data-picker-item]",
+      ),
+    );
+    if (items.length === 0) return;
+    const clamped = Math.max(0, Math.min(idx, items.length - 1));
+    items[clamped]?.focus();
+  };
+  const handleItemKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!listRef.current) return;
+    const items = Array.from(
+      listRef.current.querySelectorAll<HTMLButtonElement>(
+        "button[data-picker-item]",
+      ),
+    );
+    const currentIdx = items.indexOf(e.currentTarget);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      focusItemAt(currentIdx + 1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (currentIdx === 0) {
+        // 맨 위 → 검색 input 으로
+        const input =
+          listRef.current.parentElement?.querySelector<HTMLInputElement>(
+            "input[data-picker-search]",
+          );
+        input?.focus();
+      } else {
+        focusItemAt(currentIdx - 1);
+      }
+    }
+  };
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      focusItemAt(0);
+    } else if (e.key === "Enter") {
+      // Enter로 첫 항목 선택 (빠른 검색+실행)
+      if (!listRef.current) return;
+      const first = listRef.current.querySelector<HTMLButtonElement>(
+        "button[data-picker-item]",
+      );
+      first?.click();
+    }
+  };
+
   return (
     <DropdownPrimitive.Root open={open} onOpenChange={setOpen}>
       <DropdownPrimitive.Trigger asChild>{trigger}</DropdownPrimitive.Trigger>
@@ -71,18 +134,22 @@ export function ProjectPathPicker({
             <Search size={12} className="text-[var(--color-foreground-dim)]" />
             <input
               autoFocus
+              data-picker-search
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="프로젝트 검색…"
+              onKeyDown={handleSearchKeyDown}
+              placeholder="프로젝트 검색… (↓로 목록 이동, Enter로 첫 항목)"
               className="flex-1 bg-transparent text-sm text-[var(--color-foreground)] placeholder:text-[var(--color-foreground-dim)] focus:outline-none"
             />
           </div>
 
-          <div className="overflow-y-auto flex-1 py-1">
+          <div ref={listRef} className="overflow-y-auto flex-1 py-1">
             {/* 기본 옵션 */}
             <button
+              data-picker-item
               onClick={() => finish(null)}
-              className="w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-[var(--color-surface-hover)]"
+              onKeyDown={handleItemKeyDown}
+              className="w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-[var(--color-surface-hover)] focus:bg-[var(--color-surface-hover)] focus:outline-none"
             >
               <ChevronRight
                 size={14}
@@ -118,7 +185,12 @@ export function ProjectPathPicker({
             ) : (
               <div className="flex flex-col">
                 {projects.map((p) => (
-                  <ProjectBranch key={p.id} project={p} onSelect={finish} />
+                  <ProjectBranch
+                    key={p.id}
+                    project={p}
+                    onSelect={finish}
+                    onItemKeyDown={handleItemKeyDown}
+                  />
                 ))}
               </div>
             )}
@@ -132,9 +204,11 @@ export function ProjectPathPicker({
 function ProjectBranch({
   project,
   onSelect,
+  onItemKeyDown,
 }: {
   project: Project;
   onSelect: (cwd: string) => void;
+  onItemKeyDown?: (e: React.KeyboardEvent<HTMLButtonElement>) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -148,12 +222,15 @@ function ProjectBranch({
           }}
           className="p-1 rounded text-[var(--color-foreground-dim)]"
           aria-label={expanded ? "접기" : "펼치기"}
+          tabIndex={-1}
         >
           {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </button>
         <button
+          data-picker-item
           onClick={() => onSelect(project.path)}
-          className="flex-1 flex items-center gap-2 min-w-0 text-left py-0.5"
+          onKeyDown={onItemKeyDown}
+          className="flex-1 flex items-center gap-2 min-w-0 text-left py-0.5 focus:bg-[var(--color-surface-hover)] focus:outline-none rounded"
         >
           {project.isFavorite ? (
             <Star
@@ -176,6 +253,7 @@ function ProjectBranch({
           subPath={undefined}
           level={1}
           onSelect={onSelect}
+          onItemKeyDown={onItemKeyDown}
         />
       )}
     </div>
@@ -187,11 +265,13 @@ function PickerTreeLevel({
   subPath,
   level,
   onSelect,
+  onItemKeyDown,
 }: {
   projectId: string;
   subPath: string | undefined;
   level: number;
   onSelect: (cwd: string) => void;
+  onItemKeyDown?: (e: React.KeyboardEvent<HTMLButtonElement>) => void;
 }) {
   const { data, isLoading, error } = useProjectTree(projectId, subPath, 1);
 
@@ -230,6 +310,7 @@ function PickerTreeLevel({
           projectId={projectId}
           level={level}
           onSelect={onSelect}
+          onItemKeyDown={onItemKeyDown}
         />
       ))}
     </div>
@@ -241,11 +322,13 @@ function PickerTreeNode({
   projectId,
   level,
   onSelect,
+  onItemKeyDown,
 }: {
   node: TreeNode;
   projectId: string;
   level: number;
   onSelect: (cwd: string) => void;
+  onItemKeyDown?: (e: React.KeyboardEvent<HTMLButtonElement>) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasChildren = node.hasChildren !== false;
@@ -270,12 +353,15 @@ function PickerTreeNode({
               : "text-transparent pointer-events-none",
           )}
           aria-label={expanded ? "접기" : "펼치기"}
+          tabIndex={-1}
         >
           {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </button>
         <button
+          data-picker-item
           onClick={() => onSelect(node.absolutePath)}
-          className="flex-1 flex items-center gap-2 min-w-0 text-left py-1"
+          onKeyDown={onItemKeyDown}
+          className="flex-1 flex items-center gap-2 min-w-0 text-left py-1 focus:bg-[var(--color-surface-hover)] focus:outline-none rounded"
         >
           {expanded ? (
             <FolderOpen
@@ -297,6 +383,7 @@ function PickerTreeNode({
           subPath={node.path}
           level={level + 1}
           onSelect={onSelect}
+          onItemKeyDown={onItemKeyDown}
         />
       )}
     </div>

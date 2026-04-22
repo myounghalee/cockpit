@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useTerminalStore } from "@/store/terminal-store";
 import { useActiveProjectStore } from "@/store/active-project-store";
+import { useNewTabPickerStore } from "@/store/new-tab-picker-store";
 import { useProjects } from "@/hooks/use-projects";
 import {
   Plus,
@@ -39,6 +40,10 @@ export function TerminalTabs() {
   const activeId = useActiveProjectStore((s) => s.activeProjectId);
   const { data: projectsData } = useProjects();
   const activeProject = projectsData?.projects.find((p) => p.id === activeId);
+
+  // ⌘T 단축키와 + 버튼이 공유하는 picker open 상태
+  const pickerOpen = useNewTabPickerStore((s) => s.open);
+  const setPickerOpen = useNewTabPickerStore((s) => s.setOpen);
 
   const handlePickerSelect = (cwd: string | null) => {
     if (cwd) void createTab({ cwd });
@@ -155,6 +160,8 @@ export function TerminalTabs() {
         </div>
       ))}
       <ProjectPathPicker
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
         onSelect={handlePickerSelect}
         defaultLabel="기본 (활성 프로젝트)"
         defaultDescription={
@@ -167,7 +174,7 @@ export function TerminalTabs() {
         trigger={
           <button
             className="flex items-center justify-center w-8 h-full text-[var(--color-foreground-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-hover)]"
-            title="새 터미널 (⌘T, 클릭으로 프로젝트 선택)"
+            title={`새 터미널 (${TAB_MOD}T — 프로젝트 선택)`}
             aria-label="새 터미널"
           >
             <Plus size={16} />

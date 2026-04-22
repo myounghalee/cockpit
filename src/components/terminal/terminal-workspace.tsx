@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useTerminalStore } from "@/store/terminal-store";
+import { useNewTabPickerStore } from "@/store/new-tab-picker-store";
 import { TerminalTabs } from "./terminal-tabs";
 import { TerminalSplit } from "./terminal-split";
 import { BrowserPane } from "./browser-pane";
@@ -15,6 +17,9 @@ export function TerminalWorkspace() {
   const createTab = useTerminalStore((s) => s.createTab);
   const closeTab = useTerminalStore((s) => s.closeTab);
   const syncWithServer = useTerminalStore((s) => s.syncWithServer);
+  const splitRightmost = useTerminalStore((s) => s.splitRightmostInActiveTab);
+  const openNewTabPicker = useNewTabPickerStore((s) => s.openPicker);
+  const router = useRouter();
 
   // 앱 시작 시: persist 복원 완료 → 서버 pty 목록과 동기화 → 탭 없고 쿼리도 없으면 기본 탭 생성.
   // 1회만 실행.
@@ -38,21 +43,34 @@ export function TerminalWorkspace() {
   }, [hydrated, syncWithServer, createTab]);
 
   // 전역 단축키
+  //  ⌘T       → 프로젝트 선택 picker 열기 (키보드 네비로 선택 후 엔터)
+  //  ⌘⇧T      → 활성 탭에 horizontal split + 활성 프로젝트 cwd
+  //  ⌘W       → 탭 닫기
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       if (e.key === "t" || e.key === "T") {
         e.preventDefault();
-        void createTab();
-      } else if ((e.key === "w" || e.key === "W") && activeTabId) {
+        // 터미널 화면이 아니면 먼저 이동 (picker/split이 보이는 맥락 확보)
+        if (typeof window !== "undefined" && window.location.pathname !== "/terminal") {
+          router.push("/terminal");
+        }
+        if (e.shiftKey) {
+          // ⌘⇧T — 활성 탭의 오른쪽에 새 터미널 split (활성 프로젝트 cwd)
+          void splitRightmost();
+        } else {
+          // ⌘T — picker 열기 (즉시 탭 만들지 않음)
+          openNewTabPicker();
+        }
+      } else if ((e.key === "w" || e.key === "W") && activeTabId && !e.shiftKey) {
         e.preventDefault();
         void closeTab(activeTabId);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeTabId, createTab, closeTab]);
+  }, [activeTabId, createTab, closeTab, splitRightmost, openNewTabPicker, router]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
 

@@ -87,7 +87,20 @@ interface TerminalState {
   ) => Promise<void>;
   closePane: (paneId: string) => Promise<void>;
 
+  /**
+   * 현재 활성 탭의 가장 오른쪽 pane 기준으로 horizontal split을 추가해 터미널 생성.
+   * cwd 미지정 시 active project path 사용. 활성 탭이 터미널 탭이 아니면 no-op.
+   * ⌘⇧T 단축키용.
+   */
+  splitRightmostInActiveTab: (cwd?: string) => Promise<void>;
+
   syncWithServer: () => Promise<void>;
+}
+
+/** 분할 트리에서 가장 오른쪽/아래 leaf pane 의 id 를 찾는다. */
+function rightmostLeafPaneId(node: SplitNode): string {
+  if (node.type === "leaf") return node.pane.id;
+  return rightmostLeafPaneId(node.children[node.children.length - 1]);
 }
 
 async function createPty(opts?: {
@@ -701,6 +714,19 @@ export const useTerminalStore = create<TerminalState>()(
             return { ...t, root: newRoot };
           }),
         }));
+      },
+
+      splitRightmostInActiveTab: async (cwd) => {
+        const state = get();
+        const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
+        // 터미널 탭이 아니면 (browser/file) 아무것도 안 함
+        if (!activeTab || activeTab.type === "browser" || activeTab.type === "file") {
+          return;
+        }
+        const targetPaneId = rightmostLeafPaneId(activeTab.root);
+        const resolvedCwd =
+          cwd ?? useActiveProjectStore.getState().activeProjectPath ?? undefined;
+        await get().splitPane(targetPaneId, "horizontal", { cwd: resolvedCwd });
       },
 
       closePane: async (paneId) => {

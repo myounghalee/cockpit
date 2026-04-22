@@ -83,7 +83,7 @@ const ROOT = app.isPackaged
 
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: ChildProcess | null = null;
-let PORT = 4000; // 포트 충돌 시 자동으로 빈 포트로 변경
+let PORT = 8282; // 포트 충돌 시 자동으로 빈 포트로 변경
 
 // ─── 빈 포트 찾기 ────────────────────────────────────────────
 /** 포트가 free인지 확인 */
@@ -126,7 +126,7 @@ function writeSavedPort(port: number): void {
  * 포트 선택 우선순위:
  * 1. 저장된 이전 포트 (빈 경우)
  * 2. preferred 포트가 최대 10초 내 풀리면 사용
- * 3. 4001~4020 순차 시도
+ * 3. 8283~8302 순차 시도
  * 4. OS 할당 빈 포트
  */
 async function findFreePort(
@@ -144,7 +144,7 @@ async function findFreePort(
     await new Promise((r) => setTimeout(r, 500));
   }
 
-  // 3. 4001~4020 순차 시도 → 범위 내에서 적어도 하나는 안정적으로 잡기
+  // 3. 8283~8302 순차 시도 → 범위 내에서 적어도 하나는 안정적으로 잡기
   for (let p = preferred + 1; p <= preferred + 20; p++) {
     if (await isPortFree(p)) return p;
   }
@@ -646,8 +646,8 @@ app.whenReady().then(async () => {
     return;
   }
 
-  // 빈 포트 먼저 확보 — 저장된 포트 우선, 4000 대기, 4001~4020 시도
-  PORT = await findFreePort(4000);
+  // 빈 포트 먼저 확보 — 저장된 포트 우선, 8282 대기, 8283~8302 시도
+  PORT = await findFreePort(8282);
   writeSavedPort(PORT);
   console.log(`[cockpit] 포트 선택: ${PORT}`);
 
@@ -671,7 +671,7 @@ app.whenReady().then(async () => {
     const detail = serverStderr.slice(-2000) || "서버 로그가 없습니다.";
     dialog.showErrorBox(
       "Cockpit 서버 시작 실패",
-      `${message}\n\n[서버 로그 마지막]\n${detail}\n\n로그 전체: ${SERVER_LOG}\n\n포트 4000이 다른 프로세스에 의해 사용 중일 수 있습니다.\n터미널에서 'lsof -ti :4000' 으로 확인해주세요.`,
+      `${message}\n\n[서버 로그 마지막]\n${detail}\n\n로그 전체: ${SERVER_LOG}\n\n포트 8282가 다른 프로세스에 의해 사용 중일 수 있습니다.\n터미널에서 'lsof -ti :8282' 으로 확인해주세요.`,
     );
     app.quit();
   }

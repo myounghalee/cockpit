@@ -123,7 +123,7 @@ cd cockpit
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `PORT` | `4000` | HTTP/WebSocket 포트 |
+| `PORT` | `8282` | HTTP/WebSocket 포트 |
 | `HOST` | `127.0.0.1` | 바인딩 주소 |
 | `SHELL_PATH` | `/bin/zsh` | 기본 셸 |
 | `DEFAULT_CWD` | `$HOME` | 기본 작업 디렉토리 |
@@ -157,7 +157,7 @@ git push origin v1.x.x
 |------|------|
 | Mac "확인되지 않은 개발자" | `xattr -cr /Applications/Cockpit.app` |
 | Windows SmartScreen 경고 | "추가 정보" → "실행" |
-| 포트 충돌 | `PORT=4001 ./start.sh` |
+| 포트 충돌 | `PORT=8283 ./start.sh` |
 | node-pty 설치 실패 | Mac: `xcode-select --install` / Linux: `apt install build-essential` |
 
 ---

@@ -4,7 +4,7 @@
 // - DELETE 로 정리
 import WebSocket from "ws";
 
-const BASE = process.env.COCKPIT_URL ?? "http://127.0.0.1:4000";
+const BASE = process.env.COCKPIT_URL ?? "http://127.0.0.1:8282";
 
 async function main() {
   // 1. 터미널 생성

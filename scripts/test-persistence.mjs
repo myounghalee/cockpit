@@ -10,7 +10,7 @@
  */
 import WebSocket from "ws";
 
-const BASE = process.env.COCKPIT_URL ?? "http://127.0.0.1:4000";
+const BASE = process.env.COCKPIT_URL ?? "http://127.0.0.1:8282";
 const WS_BASE = BASE.replace(/^http/, "ws");
 
 async function createPty() {

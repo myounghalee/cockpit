@@ -151,7 +151,7 @@ fi
 
 # ---------- run ----------
 mkdir -p "$LOG_DIR"
-PORT="${PORT:-4000}"
+PORT="${PORT:-8282}"
 HOST="${HOST:-127.0.0.1}"
 
 # 포그라운드 모드

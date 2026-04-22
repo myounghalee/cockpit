@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 $PidFile = ".cockpit.pid"
 $LogDir = "logs"
 $LogFile = "$LogDir\cockpit.log"
-$Port = if ($env:PORT) { $env:PORT } else { "4000" }
+$Port = if ($env:PORT) { $env:PORT } else { "8282" }
 $Host_ = if ($env:HOST) { $env:HOST } else { "127.0.0.1" }
 
 function Log($msg) { Write-Host "[cockpit] $msg" -ForegroundColor Cyan }

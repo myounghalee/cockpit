@@ -24,14 +24,17 @@ export function ActiveProjectBadge({ collapsed }: Props) {
   const { data } = useProjects();
   const activeId = useActiveProjectStore((s) => s.activeProjectId);
   const setActive = useActiveProjectStore((s) => s.setActive);
+  const explicitlyUnset = useActiveProjectStore((s) => s.explicitlyUnset);
 
-  // stale ID 정리 + 최초 로드 시 기본값 선택
+  // stale ID 정리 + 최초 로드 시 기본값 선택.
+  // 사용자가 "활성 해제"를 누른 상태(explicitlyUnset=true)면 자동 재선택하지 않음.
   useEffect(() => {
     if (!data) return;
     if (data.projects.length === 0) {
       if (activeId) setActive(null, null);
       return;
     }
+    if (explicitlyUnset) return; // 전체 보기 모드 유지
     const exists = data.projects.find((p) => p.id === activeId);
     if (!exists) {
       const preferred =
@@ -41,7 +44,7 @@ export function ActiveProjectBadge({ collapsed }: Props) {
       // path 변경 감지 시 동기화
       setActive(exists.id, exists.path);
     }
-  }, [data, activeId, setActive]);
+  }, [data, activeId, setActive, explicitlyUnset]);
 
   const active = data?.projects.find((p) => p.id === activeId) ?? null;
 
@@ -77,10 +80,10 @@ export function ActiveProjectBadge({ collapsed }: Props) {
               <>
                 <div className="flex-1 min-w-0">
                   <div className="text-[10px] text-[var(--color-foreground-dim)] uppercase tracking-wider">
-                    Active
+                    {active ? "Active" : "View"}
                   </div>
                   <div className="truncate text-xs font-medium">
-                    {active ? active.name : "선택하세요"}
+                    {active ? active.name : "전체 프로젝트"}
                   </div>
                 </div>
                 <ChevronUp size={12} className="text-[var(--color-foreground-dim)] flex-shrink-0" />
@@ -165,7 +168,7 @@ export function ActiveProjectBadge({ collapsed }: Props) {
           </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setActive(null, null)}>
-            활성 해제
+            {active ? "활성 해제 (전체 보기)" : "✓ 전체 보기 중"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

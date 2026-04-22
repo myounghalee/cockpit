@@ -105,7 +105,30 @@ export function useDeleteTicket(projectId: string | null) {
         method: "DELETE",
         parseEmpty: true,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: TICKETS_KEY(projectId) }),
+    // Optimistic: 서버 응답 전에 즉시 카드 제거 → 삭제 버튼 반응 지연 없음
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ["tickets"] });
+      // "tickets" 하위 모든 queryKey를 뒤져서 해당 id 제거
+      // (프로젝트별 뷰 + 전체 뷰 양쪽에서 동시에 사라지게)
+      const snapshots: Array<{ key: readonly unknown[]; data: { tickets: Ticket[] } }> = [];
+      qc.getQueriesData<{ tickets: Ticket[] }>({ queryKey: ["tickets"] }).forEach(
+        ([key, data]) => {
+          if (!data) return;
+          snapshots.push({ key, data });
+          qc.setQueryData<{ tickets: Ticket[] }>(key, {
+            tickets: data.tickets.filter((t) => t.id !== id),
+          });
+        },
+      );
+      return { snapshots };
+    },
+    onError: (_err, _id, ctx) => {
+      // 실패 시 각 key의 스냅샷을 다시 밀어넣어 롤백
+      ctx?.snapshots.forEach(({ key, data }) => {
+        qc.setQueryData(key, data);
+      });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["tickets"] }),
   });
 }
 

@@ -146,6 +146,27 @@ pnpm prisma migrate deploy 2>/dev/null || pnpm prisma migrate dev --name init --
 log "Next.js 프로덕션 빌드 (1-3분 소요)…"
 pnpm build
 
+# ---------- Claude Code MCP 자동 등록 ----------
+# claude CLI 가 있으면 Cockpit MCP 서버를 user scope 로 등록.
+# 이미 등록돼 있으면 건너뜀 (claude mcp list 로 감지).
+if command -v claude >/dev/null 2>&1; then
+  if claude mcp list 2>/dev/null | grep -q "^cockpit[[:space:]]"; then
+    log "Claude Code MCP: cockpit 이미 등록됨 — 건너뜀"
+  else
+    MCP_TSX="$INSTALL_DIR/node_modules/.bin/tsx"
+    MCP_SERVER="$INSTALL_DIR/mcp/server.ts"
+    if [[ -x "$MCP_TSX" ]] && [[ -f "$MCP_SERVER" ]]; then
+      log "Claude Code MCP 등록 중…"
+      if claude mcp add -s user cockpit "$MCP_TSX" "$MCP_SERVER" >/dev/null 2>&1; then
+        log "MCP 등록 완료 — 다른 프로젝트에서 '메모/TODO/오늘 뭐 했지?' 등 요청 시 자동 사용됨"
+      else
+        log "MCP 등록 실패 (무시) — 나중에 수동 등록 가능:"
+        log "  claude mcp add -s user cockpit $MCP_TSX $MCP_SERVER"
+      fi
+    fi
+  fi
+fi
+
 # ---------- 실행 ----------
 log "설치 완료!"
 

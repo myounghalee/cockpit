@@ -141,10 +141,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           {children}
         </div>
-        {/* 터미널 — 항상 마운트, 터미널 라우트가 아니면 숨김 */}
+        {/* 터미널 — 항상 마운트, 터미널 라우트가 아니면 숨김.
+            flex 흐름 안에 배치하여 상단 UpdateBanner 를 가리지 않게 함. */}
         <div
           className={cn(
-            "absolute inset-0 flex flex-col",
+            "flex-1 min-w-0 min-h-0 flex flex-col",
             !onTerminal && "hidden",
           )}
         >

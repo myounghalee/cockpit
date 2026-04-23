@@ -4,13 +4,13 @@ import {
   SplitSquareHorizontal,
   SplitSquareVertical,
   X,
-  Globe,
   FileText,
+  Globe,
   StickyNote,
 } from "lucide-react";
 import { useTerminalStore } from "@/store/terminal-store";
 import type { TerminalPane as TerminalPaneType } from "@/types/terminal";
-import { BrowserContent } from "./browser-pane-content";
+import { MemoPaneContent } from "./memo-pane-content";
 import { MemoPicker } from "./memo-picker";
 import { usePaneDnd } from "./use-pane-dnd";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,7 @@ interface Props {
   onFocus: () => void;
 }
 
-export function BrowserSplitPane({ pane, onFocus }: Props) {
+export function MemoSplitPane({ pane, onFocus }: Props) {
   const splitPane = useTerminalStore((s) => s.splitPane);
   const closePane = useTerminalStore((s) => s.closePane);
   const dnd = usePaneDnd(pane.id);
@@ -36,13 +36,12 @@ export function BrowserSplitPane({ pane, onFocus }: Props) {
       onClick={onFocus}
       {...dnd.rootProps}
     >
-      {/* 패인 헤더 */}
       <div
         {...dnd.handleProps}
         className="flex items-center justify-between h-7 px-2 bg-[var(--color-surface)] border-b border-[var(--color-border)] text-xs text-[var(--color-foreground-muted)] cursor-grab active:cursor-grabbing"
       >
         <span className="flex items-center gap-1 truncate">
-          <Globe size={11} className="flex-shrink-0 opacity-70" />
+          <StickyNote size={11} className="flex-shrink-0 opacity-70" />
           {pane.title}
         </span>
         <div
@@ -104,10 +103,8 @@ export function BrowserSplitPane({ pane, onFocus }: Props) {
           </button>
         </div>
       </div>
-
-      {/* 브라우저 본체 */}
       <div className="flex-1 min-h-0">
-        <BrowserContent paneId={pane.id} initialUrl={pane.url ?? ""} />
+        <MemoPaneContent memoId={pane.memoId ?? ""} />
       </div>
     </div>
   );

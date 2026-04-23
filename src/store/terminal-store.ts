@@ -112,9 +112,11 @@ interface TerminalState {
     direction: SplitDirection,
     opts?: {
       cwd?: string;
-      type?: "terminal" | "browser" | "file";
+      type?: "terminal" | "browser" | "file" | "memo";
       url?: string;
       filePath?: string;
+      memoId?: string;
+      title?: string;
     },
   ) => Promise<void>;
   closePane: (paneId: string) => Promise<void>;
@@ -410,6 +412,16 @@ async function cloneSplitNode(node: SplitNode): Promise<SplitNode | null> {
         title: pane.title,
         type: "file",
         filePath: pane.filePath ?? "",
+      };
+      return { type: "leaf", pane: newPane };
+    }
+    if (pane.type === "memo") {
+      const newPane: TerminalPane = {
+        id: `memo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        cwd: pane.cwd,
+        title: pane.title,
+        type: "memo",
+        memoId: pane.memoId ?? "",
       };
       return { type: "leaf", pane: newPane };
     }
@@ -861,6 +873,14 @@ export const useTerminalStore = create<TerminalState>()(
             title: "파일 뷰어",
             type: "file",
             filePath: opts.filePath ?? "",
+          };
+        } else if (opts?.type === "memo") {
+          newPane = {
+            id: `memo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            cwd: "",
+            title: opts.title ?? "메모",
+            type: "memo",
+            memoId: opts.memoId ?? "",
           };
         } else {
           // opts.cwd가 명시되면 그 경로, 아니면 현재 패널 cwd를 기본으로 사용.

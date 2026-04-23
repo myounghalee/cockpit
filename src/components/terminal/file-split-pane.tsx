@@ -6,10 +6,12 @@ import {
   X,
   FileText,
   Globe,
+  StickyNote,
 } from "lucide-react";
 import { useTerminalStore } from "@/store/terminal-store";
 import type { TerminalPane as TerminalPaneType } from "@/types/terminal";
 import { FilePaneContent } from "./file-pane-content";
+import { MemoPicker } from "./memo-picker";
 import { usePaneDnd } from "./use-pane-dnd";
 import { cn } from "@/lib/utils";
 
@@ -75,6 +77,23 @@ export function FileSplitPane({ pane, onFocus }: Props) {
           >
             <FileText size={12} />
           </button>
+          <MemoPicker
+            onSelect={(memo) =>
+              splitPane(pane.id, "horizontal", {
+                type: "memo",
+                memoId: memo.id,
+                title: memo.title || "메모",
+              })
+            }
+            trigger={
+              <button
+                className="p-1 rounded hover:bg-[var(--color-surface-hover)]"
+                title="오른쪽에 메모 뷰어 분할"
+              >
+                <StickyNote size={12} />
+              </button>
+            }
+          />
           <button
             onClick={() => closePane(pane.id)}
             className="p-1 rounded hover:bg-[var(--color-danger)]/20 hover:text-[var(--color-danger)]"

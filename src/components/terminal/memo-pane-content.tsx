@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 import { StickyNote, RefreshCw, ExternalLink, Clock, Tag } from "lucide-react";
 import { useTerminalStore } from "@/store/terminal-store";
-import { cn } from "@/lib/utils";
+import { normalizeMarkdown } from "@/lib/markdown-normalize";
 
 interface MemoResponse {
   id: string;
@@ -121,27 +122,20 @@ export function MemoPaneContent({ memoId }: Props) {
           <div className="p-4 text-sm text-red-500">메모 로드 실패: {error}</div>
         )}
         {!error && !loading && data && (
-          <div
-            className={cn(
-              "px-5 py-4 prose prose-sm dark:prose-invert max-w-none",
-              "prose-headings:mt-4 prose-headings:mb-2",
-              "prose-p:my-2 prose-ul:my-2 prose-ol:my-2",
-              "prose-code:text-[var(--color-accent)] prose-code:bg-[var(--color-surface)]",
-              "prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none",
-              "prose-pre:bg-[var(--color-surface)] prose-pre:border prose-pre:border-[var(--color-border)]",
-            )}
+          <article
+            className="markdown-body px-6 py-4 text-[var(--color-foreground)]"
             style={{ fontSize: `${markdownFontSize}px` }}
           >
             {data.content.trim() ? (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {data.content}
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                {normalizeMarkdown(data.content)}
               </ReactMarkdown>
             ) : (
               <p className="italic text-[var(--color-foreground-dim)]">
                 (본문 비어 있음)
               </p>
             )}
-          </div>
+          </article>
         )}
         {!error && !data && loading && (
           <div className="p-6 text-center text-sm text-[var(--color-foreground-dim)]">

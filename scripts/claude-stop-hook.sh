@@ -38,14 +38,34 @@ try:
 except Exception:
     sys.exit(0)
 
-# 가장 최근 user 이벤트 위치 찾기 (그 다음부터가 "이번 턴")
+# 가장 최근 "진짜 사용자 메시지" 위치 찾기.
+# Claude Code transcript 에서 tool_result 도 type="user" 로 로깅되므로
+# content 가 tool_result 리스트인 경우는 제외해야 함.
+def is_real_user_message(ev):
+    if ev.get("type") != "user":
+        return False
+    msg = ev.get("message")
+    if not isinstance(msg, dict):
+        return False
+    content = msg.get("content")
+    if isinstance(content, str):
+        return True
+    if isinstance(content, list):
+        if not content:
+            return False
+        first = content[0]
+        if isinstance(first, dict) and first.get("type") == "tool_result":
+            return False
+        return True
+    return False
+
 last_user = -1
 for i in range(len(lines) - 1, -1, -1):
     try:
         e = json.loads(lines[i])
     except Exception:
         continue
-    if e.get("type") == "user":
+    if is_real_user_message(e):
         last_user = i
         break
 if last_user < 0:

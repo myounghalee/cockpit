@@ -25,6 +25,7 @@ import {
   useUpdateMemo,
   useDeleteMemo,
 } from "@/hooks/use-memos";
+import { useProjects } from "@/hooks/use-projects";
 
 interface MemoEditorProps {
   memo: Memo;
@@ -48,6 +49,8 @@ export function MemoEditor({
 
   const update = useUpdateMemo();
   const del = useDeleteMemo();
+  const { data: projectsData } = useProjects();
+  const projects = projectsData?.projects ?? [];
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -154,6 +157,27 @@ export function MemoEditor({
     <div className="flex-1 flex flex-col min-w-0">
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--color-border)]">
+        {/* 프로젝트 선택 — null = 전역 */}
+        <select
+          value={memo.projectId ?? "__global__"}
+          onChange={(e) => {
+            const v = e.target.value;
+            update.mutate({
+              id: memo.id,
+              projectId: v === "__global__" ? null : v,
+            });
+          }}
+          className="h-7 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+          title="이 메모가 속한 프로젝트"
+        >
+          <option value="__global__">전역</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+
         <div className="flex-1 flex items-center gap-2 text-xs text-[var(--color-foreground-dim)]">
           {saveState === "saving" && <span>저장 중...</span>}
           {saveState === "saved" && (
@@ -257,14 +281,42 @@ export function MemoEditor({
         />
       </div>
 
-      {/* Tags */}
+      {/* Tags: 편집 모드는 input, 미리보기는 pill */}
       <div className="px-6 pb-3">
-        <Input
-          value={tags}
-          onChange={(e) => setTags(e.target.value)}
-          placeholder="태그 (콤마 구분, 예: 아이디어, 버그)"
-          className="h-7 border-0 bg-transparent px-0 text-xs text-[var(--color-foreground-muted)] focus:ring-0"
-        />
+        {preview ? (
+          (() => {
+            const list = tags
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean);
+            if (list.length === 0) {
+              return (
+                <div className="h-7 flex items-center text-xs text-[var(--color-foreground-dim)]">
+                  태그 없음
+                </div>
+              );
+            }
+            return (
+              <div className="flex flex-wrap gap-1.5 min-h-7 items-center">
+                {list.map((t) => (
+                  <span
+                    key={t}
+                    className="px-2 py-0.5 rounded-full text-xs bg-[var(--color-surface)] text-[var(--color-foreground-muted)] border border-[var(--color-border)]"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+            );
+          })()
+        ) : (
+          <Input
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            placeholder="태그 (콤마 구분, 예: 아이디어, 버그)"
+            className="h-7 border-0 bg-transparent px-0 text-xs text-[var(--color-foreground-muted)] focus:ring-0"
+          />
+        )}
       </div>
 
       <div className="h-px bg-[var(--color-border)] mx-6" />

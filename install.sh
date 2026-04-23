@@ -167,6 +167,43 @@ if command -v claude >/dev/null 2>&1; then
   fi
 fi
 
+# ---------- Claude Code Stop Hook 자동 등록 ----------
+# Claude Code 가 턴을 마칠 때 의미 있는 툴 사용(파일 수정/커밋/메모·티켓 변경)을
+# cockpit daily.md 에 조용히 자동 기록. Claude 대화엔 아무 것도 표시 안 됨.
+# ~/.claude/settings.json 의 hooks.Stop 에 한 번만 등록.
+HOOK_SCRIPT="$INSTALL_DIR/scripts/claude-stop-hook.sh"
+SETTINGS_FILE="$HOME/.claude/settings.json"
+
+if [[ -x "$HOOK_SCRIPT" ]]; then
+  mkdir -p "$(dirname "$SETTINGS_FILE")"
+  node -e '
+    const fs = require("fs");
+    const p = process.argv[1];
+    const hookCmd = process.argv[2];
+    let s = {};
+    try { s = JSON.parse(fs.readFileSync(p, "utf8")); } catch {}
+    s.hooks = s.hooks || {};
+    s.hooks.Stop = s.hooks.Stop || [];
+    const already = s.hooks.Stop.some(e =>
+      (e.hooks || []).some(h => h && h.command && h.command.includes("cockpit-app/scripts/claude-stop-hook.sh"))
+    );
+    if (already) { console.log("ALREADY"); process.exit(0); }
+    s.hooks.Stop.push({
+      matcher: "",
+      hooks: [{ type: "command", command: hookCmd }]
+    });
+    fs.writeFileSync(p, JSON.stringify(s, null, 2));
+    console.log("ADDED");
+  ' "$SETTINGS_FILE" "$HOOK_SCRIPT" 2>/dev/null | {
+    read result
+    case "$result" in
+      ADDED)   log "Claude Code Stop 훅 등록 완료 — 파일 수정/커밋/메모·티켓 변경을 daily.md 에 자동 기록" ;;
+      ALREADY) log "Claude Code Stop 훅: 이미 등록됨 — 건너뜀" ;;
+      *)       log "Claude Code Stop 훅 등록 스킵 (settings.json 처리 실패 — 무시)" ;;
+    esac
+  }
+fi
+
 # ---------- 실행 ----------
 log "설치 완료!"
 

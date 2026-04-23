@@ -56,6 +56,13 @@ export type DailyEvent =
       title: string;
       projectName?: string | null;
       ticketId: string;
+    }
+  | {
+      kind: "activity";
+      title: string;
+      details?: string | null;
+      projectName?: string | null;
+      tags?: string;
     };
 
 function pad(n: number): string {
@@ -132,6 +139,19 @@ function formatLine(event: DailyEvent, time: string): string {
       return `- \`${time}\` 🗄️ 메모 아카이브:${projectBadge(event.projectName)} ${event.title}`;
     case "memo.converted":
       return `- \`${time}\` ➡️ 메모 → 티켓:${projectBadge(event.projectName)} ${event.title}`;
+    case "activity": {
+      const tags = event.tags?.trim()
+        ? ` _(${event.tags
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+            .join(", ")})_`
+        : "";
+      const details = event.details?.trim()
+        ? `\n    - ${event.details.trim().replace(/\n+/g, " ")}`
+        : "";
+      return `- \`${time}\` 🤖 **작업**:${projectBadge(event.projectName)} ${event.title}${tags}${details}`;
+    }
   }
 }
 

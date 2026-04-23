@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectPathPicker } from "@/components/projects/project-path-picker";
+import { MemoPicker } from "./memo-picker";
 
 const IS_MAC =
   typeof navigator !== "undefined" &&
@@ -30,6 +31,7 @@ export function TerminalTabs() {
   const createTab = useTerminalStore((s) => s.createTab);
   const createBrowserTab = useTerminalStore((s) => s.createBrowserTab);
   const createFileTab = useTerminalStore((s) => s.createFileTab);
+  const createMemoTab = useTerminalStore((s) => s.createMemoTab);
   const duplicateTab = useTerminalStore((s) => s.duplicateTab);
   const renameTab = useTerminalStore((s) => s.renameTab);
   const reorderTabs = useTerminalStore((s) => s.reorderTabs);
@@ -251,6 +253,18 @@ export function TerminalTabs() {
       >
         <FileText size={14} />
       </button>
+      <MemoPicker
+        onSelect={(memo) => createMemoTab(memo.id, memo.title || "메모")}
+        trigger={
+          <button
+            className="flex items-center justify-center w-8 h-full text-[var(--color-foreground-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-hover)]"
+            title="메모 열기 (검색)"
+            aria-label="메모 탭 열기"
+          >
+            <StickyNote size={14} />
+          </button>
+        }
+      />
     </div>
   );
 }

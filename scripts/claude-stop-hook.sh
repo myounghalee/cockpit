@@ -156,6 +156,23 @@ if daily_log_called:
 if not edits and not writes and not bash_items and not mcp_items:
     sys.exit(0)
 
+# ── 중요도 필터 (환경변수로 조정 가능) ────────────────────
+# 기본 규칙: 아래 중 하나라도 해당하면 "중요" → 로그.
+#   1) git commit / push 있음
+#   2) memo_create / ticket_create 있음 (새 산출물)
+#   3) 고유 파일 수정 수 >= COCKPIT_HOOK_MIN_FILES (기본 3)
+# 전부 해당 안 되면 스킵. COCKPIT_HOOK_ALWAYS_LOG=1 이면 필터 건너뜀.
+if os.environ.get("COCKPIT_HOOK_ALWAYS_LOG") != "1":
+    try:
+        min_files = int(os.environ.get("COCKPIT_HOOK_MIN_FILES", "3"))
+    except Exception:
+        min_files = 3
+    has_commit = any(b.get("kind") in ("git_commit", "git_push") for b in bash_items)
+    has_create = any(m.get("leaf") in ("memo_create", "ticket_create") for m in mcp_items)
+    unique_files = len(set(edits) | set(writes))
+    if not (has_commit or has_create or unique_files >= min_files):
+        sys.exit(0)
+
 # ── FALLBACK (기계적) ─────────────────────────────────────
 fb_parts = []
 if edits:

@@ -151,7 +151,7 @@ export function UsageTab() {
         <div className="text-[11px] text-[var(--color-foreground-dim)] px-1">
           ⚠️ 구독 quota 잔량은 로컬에 저장되지 않아 여기서 표시할 수 없어요. 여기 값은{" "}
           <code className="font-mono">~/.claude/projects/</code> transcript 에서
-          누적 집계한 "사용량" 기준입니다.
+          누적 집계한 &lsquo;사용량&rsquo; 기준입니다.
         </div>
       </div>
     </div>

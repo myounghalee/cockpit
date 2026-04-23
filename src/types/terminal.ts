@@ -12,12 +12,14 @@ export interface TerminalPane {
    * 주입 후에는 store에서 null로 지워진다 (재연결 시 중복 주입 방지).
    */
   initialInput?: string | null;
-  /** pane 종류 — "terminal"(기본), "browser", "file" */
-  type?: "terminal" | "browser" | "file";
+  /** pane 종류 — "terminal"(기본), "browser", "file", "memo" */
+  type?: "terminal" | "browser" | "file" | "memo";
   /** browser pane 전용 URL */
   url?: string;
   /** file pane 전용 절대 경로 */
   filePath?: string;
+  /** memo pane 전용 id (Memo.id) */
+  memoId?: string;
 }
 
 export type SplitDirection = "horizontal" | "vertical";
@@ -32,9 +34,9 @@ export interface TerminalTab {
   root: SplitNode;
   /** 이 탭을 생성한 칸반 티켓 ID (실행 중 표시에 사용) */
   ticketId?: string | null;
-  /** 탭 종류 — "terminal"(기본), "browser", "file" */
-  type?: "terminal" | "browser" | "file";
-  /** browser 탭 전용 URL / file 탭 전용 경로 */
+  /** 탭 종류 — "terminal"(기본), "browser", "file", "memo" */
+  type?: "terminal" | "browser" | "file" | "memo";
+  /** browser 탭 전용 URL / file 탭 전용 경로 / memo 탭 전용 memoId */
   url?: string;
 }
 

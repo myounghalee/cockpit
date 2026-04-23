@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -16,6 +17,7 @@ import {
   Check,
   Square,
   CheckSquare,
+  Terminal as TerminalIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +28,7 @@ import {
   useDeleteMemo,
 } from "@/hooks/use-memos";
 import { useProjects } from "@/hooks/use-projects";
+import { useTerminalStore } from "@/store/terminal-store";
 
 interface MemoEditorProps {
   memo: Memo;
@@ -38,6 +41,7 @@ export function MemoEditor({
   onRequestConvert,
   onDeleted,
 }: MemoEditorProps) {
+  const router = useRouter();
   const [title, setTitle] = useState(memo.title);
   const [content, setContent] = useState(memo.content);
   const [tags, setTags] = useState(memo.tags);
@@ -216,6 +220,19 @@ export function MemoEditor({
         >
           {preview ? <Pencil size={14} /> : <Eye size={14} />}
           <span className="text-xs">{preview ? "편집" : "미리보기"}</span>
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            useTerminalStore.getState().createMemoTab(memo.id, memo.title || "메모");
+            router.push("/terminal");
+          }}
+          title="터미널 탭에서 이 메모를 뷰어로 열기"
+        >
+          <TerminalIcon size={14} />
+          <span className="text-xs">터미널에서 보기</span>
         </Button>
 
         <Button

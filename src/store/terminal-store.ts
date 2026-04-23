@@ -83,6 +83,8 @@ interface TerminalState {
   createFileTab: (filePath?: string, tabName?: string) => string;
   /** 파일 뷰어 경로 갱신 */
   setFilePath: (id: string, filePath: string) => void;
+  /** 메모 뷰어 탭 생성 — memoId 필수. 이미 열린 동일 memoId 탭이 있으면 그 탭을 활성화. */
+  createMemoTab: (memoId: string, tabName?: string) => string;
   /** 최근 파일 히스토리에 경로 추가 (파일 로드 성공 후 호출) */
   addRecentFile: (filePath: string) => void;
   /** 최근 URL 히스토리에 URL 추가 (브라우저 이동 시 호출) */
@@ -215,7 +217,7 @@ async function recreateDeadPanes(
 ): Promise<SplitNode | null> {
   if (node.type === "leaf") {
     const { pane } = node;
-    if (pane.type === "browser" || pane.type === "file") {
+    if (pane.type === "browser" || pane.type === "file" || pane.type === "memo") {
       return node;
     }
     // 터미널 pane
@@ -565,8 +567,8 @@ export const useTerminalStore = create<TerminalState>()(
       closeTab: async (tabId) => {
         const tab = get().tabs.find((t) => t.id === tabId);
         if (!tab) return;
-        // 브라우저/파일 탭은 pty 없음 → 그냥 state에서만 제거
-        if (tab.type === "browser" || tab.type === "file") {
+        // 브라우저/파일/메모 탭은 pty 없음 → 그냥 state에서만 제거
+        if (tab.type === "browser" || tab.type === "file" || tab.type === "memo") {
           set((s) => {
             const remaining = s.tabs.filter((t) => t.id !== tabId);
             const nextActive =
@@ -605,7 +607,12 @@ export const useTerminalStore = create<TerminalState>()(
           // 깜빡임 즉시 중지. 다음 완료 이벤트(busy→idle 전환)가 들어오면
           // setPaneStatus 에서 acknowledged=false 로 자동 리셋되어 다시 알림.
           const tab = s.tabs.find((t) => t.id === tabId);
-          if (!tab || tab.type === "browser" || tab.type === "file") {
+          if (
+            !tab ||
+            tab.type === "browser" ||
+            tab.type === "file" ||
+            tab.type === "memo"
+          ) {
             return { activeTabId: tabId };
           }
           const panes = findAllPanes(tab.root);
@@ -689,6 +696,35 @@ export const useTerminalStore = create<TerminalState>()(
           })),
         })),
 
+      createMemoTab: (memoId, tabName) => {
+        // 이미 같은 memoId 로 열린 탭이 있으면 활성화만
+        const existing = get().tabs.find(
+          (t) => t.type === "memo" && t.url === memoId,
+        );
+        if (existing) {
+          set({ activeTabId: existing.id });
+          return existing.id;
+        }
+        const tabId = `memo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const pane: TerminalPane = {
+          id: tabId,
+          cwd: "",
+          title: tabName ?? "메모",
+          initialInput: null,
+          type: "memo",
+          memoId,
+        };
+        const tab: TerminalTab = {
+          id: tabId,
+          name: tabName ?? "메모",
+          root: { type: "leaf", pane },
+          type: "memo",
+          url: memoId,
+        };
+        set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tabId }));
+        return tabId;
+      },
+
       addRecentFile: (filePath) => {
         const p = filePath.trim();
         if (!p) return;
@@ -756,6 +792,28 @@ export const useTerminalStore = create<TerminalState>()(
         }
         if (tab.type === "file") {
           return get().createFileTab(tab.url, tab.name);
+        }
+        if (tab.type === "memo" && tab.url) {
+          // memoId 그대로 재사용 — 단, createMemoTab 은 동일 memoId 이면 활성화만 해서
+          // 실제 복제가 안 되므로 새 tabId 로 강제 생성.
+          const tabId = `memo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const pane: TerminalPane = {
+            id: tabId,
+            cwd: "",
+            title: tab.name,
+            initialInput: null,
+            type: "memo",
+            memoId: tab.url,
+          };
+          const newTab: TerminalTab = {
+            id: tabId,
+            name: tab.name,
+            root: { type: "leaf", pane },
+            type: "memo",
+            url: tab.url,
+          };
+          set((s) => ({ tabs: [...s.tabs, newTab], activeTabId: tabId }));
+          return tabId;
         }
 
         // 터미널 탭 — 분할 트리 구조를 유지하면서 새 탭 생성
@@ -832,8 +890,13 @@ export const useTerminalStore = create<TerminalState>()(
       splitRightmostInActiveTab: async (cwd) => {
         const state = get();
         const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
-        // 터미널 탭이 아니면 (browser/file) 아무것도 안 함
-        if (!activeTab || activeTab.type === "browser" || activeTab.type === "file") {
+        // 터미널 탭이 아니면 (browser/file/memo) 아무것도 안 함
+        if (
+          !activeTab ||
+          activeTab.type === "browser" ||
+          activeTab.type === "file" ||
+          activeTab.type === "memo"
+        ) {
           return;
         }
         const targetPaneId = rightmostLeafPaneId(activeTab.root);
@@ -875,7 +938,7 @@ export const useTerminalStore = create<TerminalState>()(
           // 죽은 터미널 pane은 같은 cwd로 새 PTY 생성 → 앱 재시작 후 레이아웃 유지
           const updatedTabs: TerminalTab[] = [];
           for (const t of get().tabs) {
-            if (t.type === "browser" || t.type === "file") {
+            if (t.type === "browser" || t.type === "file" || t.type === "memo") {
               updatedTabs.push(t);
               continue;
             }

@@ -12,6 +12,7 @@ import { TerminalTabs } from "./terminal-tabs";
 import { TerminalSplit } from "./terminal-split";
 import { BrowserPane } from "./browser-pane";
 import { FilePane } from "./file-pane";
+import { MemoPane } from "./memo-pane";
 import { Terminal as TerminalIcon } from "lucide-react";
 
 export function TerminalWorkspace() {
@@ -63,7 +64,7 @@ export function TerminalWorkspace() {
       ) {
         const state = useTerminalStore.getState();
         const active = state.tabs.find((t) => t.id === state.activeTabId);
-        if (!active || active.type === "browser" || active.type === "file")
+        if (!active || active.type === "browser" || active.type === "file" || active.type === "memo")
           return;
         const panes = flattenPanes(active.root);
         if (panes.length <= 1) return;
@@ -139,7 +140,7 @@ export function TerminalWorkspace() {
         }
         const state = useTerminalStore.getState();
         const active = state.tabs.find((t) => t.id === state.activeTabId);
-        if (!active || active.type === "browser" || active.type === "file") return;
+        if (!active || active.type === "browser" || active.type === "file" || active.type === "memo") return;
         const firstId = firstLeafPaneId(active.root);
         window.dispatchEvent(
           new CustomEvent("cockpit-focus-pane", { detail: { paneId: firstId } }),
@@ -196,6 +197,8 @@ export function TerminalWorkspace() {
                 <BrowserPane tabId={tab.id} initialUrl={tab.url} />
               ) : tab.type === "file" ? (
                 <FilePane tabId={tab.id} initialPath={tab.url} />
+              ) : tab.type === "memo" ? (
+                <MemoPane tabId={tab.id} memoId={tab.url ?? ""} />
               ) : (
                 <TerminalSplit node={tab.root} tabId={tab.id} />
               )}

@@ -12,6 +12,7 @@ import {
   Terminal as TerminalIcon,
   FileText,
   Copy,
+  StickyNote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectPathPicker } from "@/components/projects/project-path-picker";
@@ -65,7 +66,7 @@ export function TerminalTabs() {
   // acknowledged=true 면 깜빡임 중지 (탭 클릭 시 자동 true).
   // 같은 awaitingInput 상태가 계속 와도 재트리거 안 함 (justStartedAwaiting 에서만 리셋).
   const tabRunState = (tab: (typeof tabs)[number]) => {
-    if (tab.type === "browser" || tab.type === "file") {
+    if (tab.type === "browser" || tab.type === "file" || tab.type === "memo") {
       return { attention: false, command: null as string | null };
     }
     const panes = flattenPanes(tab.root);
@@ -143,6 +144,8 @@ export function TerminalTabs() {
             <Globe size={12} className="flex-shrink-0 opacity-70" />
           ) : tab.type === "file" ? (
             <FileText size={12} className="flex-shrink-0 opacity-70" />
+          ) : tab.type === "memo" ? (
+            <StickyNote size={12} className="flex-shrink-0 opacity-70" />
           ) : runState.attention ? (
             // 방금 완료 — 탭을 보면 acknowledged=true 로 바뀌어 깜빡임 중지
             <span

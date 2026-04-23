@@ -2,6 +2,19 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { appendDailyEntry } from "@/lib/daily-log";
 
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const memo = await prisma.memo.findUnique({
+    where: { id },
+    include: { project: { select: { id: true, name: true, path: true } } },
+  });
+  if (!memo) return NextResponse.json({ error: "not found" }, { status: 404 });
+  return NextResponse.json(memo);
+}
+
 interface PatchBody {
   title?: string;
   content?: string;

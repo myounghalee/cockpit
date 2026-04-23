@@ -29,6 +29,7 @@ const NAV_SHORTCUTS: Record<string, string> = {
   "4": "/git",
   "5": "/memo",
   "6": "/insights",
+  "7": "/claude",
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {

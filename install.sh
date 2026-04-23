@@ -167,15 +167,18 @@ if command -v claude >/dev/null 2>&1; then
   fi
 fi
 
-# ---------- Claude Code Stop Hook 자동 등록 ----------
-# Claude Code 가 턴을 마칠 때 의미 있는 툴 사용(파일 수정/커밋/메모·티켓 변경)을
-# cockpit daily.md 에 조용히 자동 기록. Claude 대화엔 아무 것도 표시 안 됨.
-# ~/.claude/settings.json 의 hooks.Stop 에 한 번만 등록.
-HOOK_SCRIPT="$INSTALL_DIR/scripts/claude-stop-hook.sh"
+# ---------- Claude Code Hook 자동 등록 ----------
+# - Stop 훅: v4 부터 no-op (호환 유지용). 과거 사용자 설정에 등록돼 있을 수 있어 유지.
+# - SessionEnd 훅: 세션 종료 시 대화 전체를 LLM 으로 한 단락 요약해 cockpit
+#   daily.md 에 1건 기록. 의미 없는 세션은 "NONE" 판정으로 스킵.
+STOP_HOOK_SCRIPT="$INSTALL_DIR/scripts/claude-stop-hook.sh"
+SESSIONEND_HOOK_SCRIPT="$INSTALL_DIR/scripts/claude-sessionend-hook.sh"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
-if [[ -x "$HOOK_SCRIPT" ]]; then
-  mkdir -p "$(dirname "$SETTINGS_FILE")"
+mkdir -p "$(dirname "$SETTINGS_FILE")"
+
+# Stop 훅 등록 (호환 유지 — 기존 사용자가 활성화 상태였으면 그대로, 아니면 건너뜀은 안 하고 등록)
+if [[ -x "$STOP_HOOK_SCRIPT" ]]; then
   node -e '
     const fs = require("fs");
     const p = process.argv[1];
@@ -194,12 +197,42 @@ if [[ -x "$HOOK_SCRIPT" ]]; then
     });
     fs.writeFileSync(p, JSON.stringify(s, null, 2));
     console.log("ADDED");
-  ' "$SETTINGS_FILE" "$HOOK_SCRIPT" 2>/dev/null | {
+  ' "$SETTINGS_FILE" "$STOP_HOOK_SCRIPT" 2>/dev/null | {
     read result
     case "$result" in
-      ADDED)   log "Claude Code Stop 훅 등록 완료 — 파일 수정/커밋/메모·티켓 변경을 daily.md 에 자동 기록" ;;
+      ADDED)   log "Claude Code Stop 훅 등록 완료 (v4: no-op 호환용)" ;;
       ALREADY) log "Claude Code Stop 훅: 이미 등록됨 — 건너뜀" ;;
       *)       log "Claude Code Stop 훅 등록 스킵 (settings.json 처리 실패 — 무시)" ;;
+    esac
+  }
+fi
+
+# SessionEnd 훅 등록 — conversation-based recap 이 실제로 동작하는 곳
+if [[ -x "$SESSIONEND_HOOK_SCRIPT" ]]; then
+  node -e '
+    const fs = require("fs");
+    const p = process.argv[1];
+    const hookCmd = process.argv[2];
+    let s = {};
+    try { s = JSON.parse(fs.readFileSync(p, "utf8")); } catch {}
+    s.hooks = s.hooks || {};
+    s.hooks.SessionEnd = s.hooks.SessionEnd || [];
+    const already = s.hooks.SessionEnd.some(e =>
+      (e.hooks || []).some(h => h && h.command && h.command.includes("cockpit-app/scripts/claude-sessionend-hook.sh"))
+    );
+    if (already) { console.log("ALREADY"); process.exit(0); }
+    s.hooks.SessionEnd.push({
+      matcher: "",
+      hooks: [{ type: "command", command: hookCmd }]
+    });
+    fs.writeFileSync(p, JSON.stringify(s, null, 2));
+    console.log("ADDED");
+  ' "$SETTINGS_FILE" "$SESSIONEND_HOOK_SCRIPT" 2>/dev/null | {
+    read result
+    case "$result" in
+      ADDED)   log "Claude Code SessionEnd 훅 등록 완료 — 세션 종료 시 대화 요약을 daily.md 에 기록" ;;
+      ALREADY) log "Claude Code SessionEnd 훅: 이미 등록됨 — 건너뜀" ;;
+      *)       log "Claude Code SessionEnd 훅 등록 스킵 (settings.json 처리 실패 — 무시)" ;;
     esac
   }
 fi

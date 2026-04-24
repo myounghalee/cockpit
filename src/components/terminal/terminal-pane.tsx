@@ -157,17 +157,43 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
       ws.send({ type: "input", data });
     });
 
-    // 초기 사이즈 전송
+    // 초기 사이즈 전송.
+    // fit() 직후 cols/rows 를 읽지만 xterm 렌더가 완전히 반영되었다는 보장은 없어
+    // rAF 다음 프레임에 한 번 더 측정해 전송하는 편이 안전.
+    let lastCols = -1;
+    let lastRows = -1;
+    let resizeRafId: number | null = null;
     const sendResize = () => {
-      fit.fit();
-      const { cols, rows } = term;
-      ws.send({ type: "resize", cols, rows });
+      if (resizeRafId != null) cancelAnimationFrame(resizeRafId);
+      resizeRafId = requestAnimationFrame(() => {
+        resizeRafId = null;
+        try {
+          fit.fit();
+        } catch {
+          return;
+        }
+        const { cols, rows } = term;
+        // cols/rows 가 0 이면 DOM 이 아직 layout 안 된 상태 → 스킵
+        if (!cols || !rows) return;
+        // 같은 값이면 메시지 안 보냄 (PTY 재resize race 방지)
+        if (cols === lastCols && rows === lastRows) return;
+        lastCols = cols;
+        lastRows = rows;
+        ws.send({ type: "resize", cols, rows });
+      });
     };
-    // xterm이 DOM에 attach된 직후 한 번
-    requestAnimationFrame(sendResize);
 
+    // 초기 한 번
+    sendResize();
+
+    // ResizeObserver — 연속 콜 debounce 로 병합 (~50ms)
+    let resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
     const resizeObserver = new ResizeObserver(() => {
-      sendResize();
+      if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+      resizeDebounceTimer = setTimeout(() => {
+        resizeDebounceTimer = null;
+        sendResize();
+      }, 50);
     });
     resizeObserver.observe(containerRef.current);
 
@@ -177,6 +203,8 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
 
     return () => {
       resizeObserver.disconnect();
+      if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+      if (resizeRafId != null) cancelAnimationFrame(resizeRafId);
       onData.dispose();
       unsubscribe();
       ws.close();

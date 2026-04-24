@@ -31,7 +31,15 @@ export interface PtyRecord {
   status: PtyStatus;
   /** pty.onData 가 마지막으로 발동한 시각 — awaitingInput 판정용 */
   lastOutputAt: number;
+  /** onData 배칭 버퍼 — 짧은 시간 내 연속 출력은 한 메시지로 합쳐 구독자에게 전송 */
+  pendingOutput?: string;
+  pendingFlushTimer?: NodeJS.Timeout;
 }
+
+/** onData 배칭 윈도 — 이 시간 안에 들어온 연속 출력은 1개 메시지로 합쳐 보냄. */
+const OUTPUT_FLUSH_MS = 8;
+/** WebSocket bufferedAmount 경고 임계값 (10MB). 초과 시 warn 로그 1회. */
+const WS_BACKPRESSURE_WARN_BYTES = 10 * 1024 * 1024;
 
 /**
  * awaitingInput 판정 관련 상수.
@@ -158,8 +166,39 @@ function getIdleTimeoutMs(): number {
   return Math.min(n, 24 * 60 * 60 * 1000); // max 24h
 }
 
+/**
+ * pending 배치 버퍼를 구독자들에게 플러시.
+ * OUTPUT_FLUSH_MS 윈도 동안 누적된 출력을 한 output 메시지로 결합해 전송.
+ */
+function flushPendingOutput(record: PtyRecord): void {
+  if (record.pendingFlushTimer) {
+    clearTimeout(record.pendingFlushTimer);
+    record.pendingFlushTimer = undefined;
+  }
+  const data = record.pendingOutput;
+  record.pendingOutput = undefined;
+  if (!data) return;
+  for (const ws of record.subscribers) {
+    send(ws, { type: "output", data });
+  }
+}
+
 function send(ws: WebSocket, message: unknown): void {
   if (ws.readyState === ws.OPEN) {
+    // 백프레셔 감지 — 임계값 초과 시 1회 warn. 실제 drop 은 하지 않음(데이터 손실 방지).
+    const buffered = (ws as WebSocket & { bufferedAmount?: number }).bufferedAmount;
+    if (
+      typeof buffered === "number" &&
+      buffered > WS_BACKPRESSURE_WARN_BYTES &&
+      !(ws as WebSocket & { _cockpitBackpressureWarned?: boolean })
+        ._cockpitBackpressureWarned
+    ) {
+      (ws as WebSocket & { _cockpitBackpressureWarned?: boolean })
+        ._cockpitBackpressureWarned = true;
+      console.warn(
+        `[pty] WebSocket backpressure: ${Math.round(buffered / 1024 / 1024)}MB buffered`,
+      );
+    }
     try {
       ws.send(JSON.stringify(message));
     } catch {
@@ -301,12 +340,24 @@ export class PtyManager {
     pty.onData((data) => {
       record.buffer.write(data);
       record.lastOutputAt = Date.now();
-      for (const ws of record.subscribers) {
-        send(ws, { type: "output", data });
+      // 배칭: 연속 출력은 OUTPUT_FLUSH_MS 윈도 안에서 한 메시지로 합침.
+      // UTF-8 경계는 node-pty 가 StringDecoder 로 이미 보장(string 전달)하므로
+      // 여기서는 단순 문자열 concat 안전.
+      if (record.pendingOutput == null) {
+        record.pendingOutput = data;
+      } else {
+        record.pendingOutput += data;
+      }
+      if (!record.pendingFlushTimer) {
+        record.pendingFlushTimer = setTimeout(() => {
+          flushPendingOutput(record);
+        }, OUTPUT_FLUSH_MS);
       }
     });
 
     pty.onExit(({ exitCode }) => {
+      // 종료 전 남은 pending 을 먼저 내보내 마지막 라인 누락 방지
+      flushPendingOutput(record);
       record.exited = true;
       for (const ws of record.subscribers) {
         send(ws, { type: "exit", code: exitCode });
@@ -315,6 +366,7 @@ export class PtyManager {
       setTimeout(() => {
         this.records.delete(id);
         if (record.idleTimer) clearTimeout(record.idleTimer);
+        if (record.pendingFlushTimer) clearTimeout(record.pendingFlushTimer);
       }, 2000);
     });
 
@@ -385,6 +437,7 @@ export class PtyManager {
     const record = this.records.get(id);
     if (!record) return false;
     if (record.idleTimer) clearTimeout(record.idleTimer);
+    if (record.pendingFlushTimer) clearTimeout(record.pendingFlushTimer);
     try {
       record.pty.kill();
     } catch {

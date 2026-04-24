@@ -4,10 +4,13 @@ Cockpit commit-hook parser.
 
 stdin 으로 Claude Code PostToolUse 이벤트 JSON 을 받아:
   - tool_name == "Bash"
-  - tool_input.command 에 `git commit -m "..."` 또는 `git push`
+  - tool_input.command 에 `git commit -m "..."`
   - tool_response.is_error != True
-모두 참이면 stdout 에 "COMMIT|<message>" 또는 "PUSH|<cmd_first_line>" 출력.
-아니면 아무것도 안 찍고 exit 0.
+모두 참이면 stdout 에 "COMMIT|<message>" 출력. 아니면 exit 0.
+
+push 는 기록하지 않음 — 어떤 커밋이 올라갔는지는 이미 개별 COMMIT 로그로
+드러나므로, "git push origin main" 같은 전송 커맨드 자체를 또 찍는 건
+"내가 뭘 했는지" 회고 관점에서 노이즈.
 
 쉘 훅 스크립트에서 heredoc 으로 파이썬 코드를 인라인하다가
 quote 충돌 이슈가 반복돼 별도 파일로 분리함.
@@ -45,24 +48,22 @@ def main() -> None:
 
     commit_msg: str | None = None
     if "git commit" in low:
-        # -m "msg"  또는  -m 'msg'
-        m = re.search(r'''git\s+commit[^"']*-m\s+["'](.+?)["']''', cmd, re.DOTALL)
+        # HEREDOC 먼저 시도 — Claude Code 가 멀티라인 메시지 쓸 때 쓰는 패턴:
+        #   git commit -m "$(cat <<'EOF'\n<실제 메시지>\nEOF\n)"
+        # 이 경우 단순 -m "..." regex 는 "$(cat <<" 를 메시지로 오인하므로 HEREDOC 우선.
+        m = re.search(r"<<[\-']?([A-Z]+)[\-']?\s*\n(.+?)\n\s*\1", cmd, re.DOTALL)
         if m:
-            commit_msg = m.group(1).strip().split("\n")[0][:140]
+            commit_msg = m.group(2).strip().split("\n")[0][:140]
         else:
-            # HEREDOC 스타일 (<<'EOF' ... EOF)
-            m = re.search(r"<<[\-']?([A-Z]+)[\-']?\s*\n(.+?)\n\s*\1", cmd, re.DOTALL)
+            # -m "msg"  또는  -m 'msg' (단일 라인 메시지)
+            m = re.search(r'''git\s+commit[^"']*-m\s+["'](.+?)["']''', cmd, re.DOTALL)
             if m:
-                commit_msg = m.group(2).strip().split("\n")[0][:140]
+                commit_msg = m.group(1).strip().split("\n")[0][:140]
 
     if commit_msg:
         print("COMMIT|" + commit_msg)
         return
-
-    if "git push" in low:
-        first = cmd.strip().split("\n")[0][:100]
-        print("PUSH|" + first)
-        return
+    # push 는 의도적으로 무시
 
 
 if __name__ == "__main__":

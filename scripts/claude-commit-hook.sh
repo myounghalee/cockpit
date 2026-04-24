@@ -32,7 +32,6 @@ fi
 
 case "$kind" in
   COMMIT) title="커밋: $msg"; tags="auto,commit" ;;
-  PUSH)   title="Push: $msg"; tags="auto,push" ;;
   *) exit 0 ;;
 esac
 

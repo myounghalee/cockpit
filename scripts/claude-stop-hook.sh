@@ -51,47 +51,11 @@ if [ -f "$pf" ]; then
   esac
 fi
 
-# 각 recap 블록을 순회하며 POST. python 으로 분리·JSON 생성까지 위임.
-printf '%s' "$payload" | python3 - "$port" <<'PY' 2>/dev/null
-import json, re, sys, urllib.request
-
-port = sys.argv[1]
-raw = sys.stdin.read()
-blocks = raw.split("---NEXT---")
-for block in blocks:
-    block = block.strip()
-    if not block:
-        continue
-    m = re.match(r"^---UUID:([^\-]+)---\s*\n(.+)$", block, re.DOTALL)
-    if not m:
-        continue
-    uuid = m.group(1).strip()
-    text = m.group(2).strip()
-    if len(text) < 50:
-        continue
-
-    # title = 첫 문장 (140자 제한), details = 전체 본문 (1500자 제한)
-    head_match = re.split(r"(?<=[.!?。])\s+", text, maxsplit=1)
-    head = head_match[0] if head_match else text
-    if len(head) > 140:
-        head = head[:137] + "…"
-
-    body = json.dumps({
-        "title": head,
-        "details": text[:1500],
-        "tags": "auto,recap,claude",
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        f"http://127.0.0.1:{port}/api/insights/daily",
-        data=body,
-        headers={"content-type": "application/json"},
-        method="POST",
-    )
-    try:
-        urllib.request.urlopen(req, timeout=5).read()
-    except Exception:
-        pass
-PY
+# 각 recap 블록을 POST. 별도 파이썬 스크립트(claude-recap-post.py) 로 위임해
+# heredoc(script 전달) + pipe(payload) stdin 충돌을 피함.
+POSTER="$SCRIPT_DIR/claude-recap-post.py"
+if [ -x "$POSTER" ]; then
+  printf '%s' "$payload" | python3 "$POSTER" "$port" 2>/dev/null
+fi
 
 exit 0

@@ -18,8 +18,26 @@ quote 충돌 이슈가 반복돼 별도 파일로 분리함.
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 import sys
+
+
+def resolve_project_name(hook_data: dict) -> str:
+    """hook 입력의 cwd 기반으로 git repo basename 을 반환. 실패 시 빈 문자열."""
+    cwd = hook_data.get("cwd") or ""
+    if not cwd:
+        cwd = os.getcwd()
+    try:
+        out = subprocess.check_output(
+            ["git", "-C", cwd, "rev-parse", "--show-toplevel"],
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        )
+        return os.path.basename(out.decode("utf-8").strip())
+    except Exception:
+        return ""
 
 
 def main() -> None:
@@ -61,7 +79,9 @@ def main() -> None:
                 commit_msg = m.group(1).strip().split("\n")[0][:140]
 
     if commit_msg:
-        print("COMMIT|" + commit_msg)
+        project = resolve_project_name(data)
+        # 구분자 | 로 msg|project 출력 (project 빈 문자열 허용)
+        print("COMMIT|" + commit_msg + "|" + project)
         return
     # push 는 의도적으로 무시
 

@@ -102,8 +102,12 @@ function resolveShell(requested?: string): string {
 
 /**
  * PTY에 전달할 환경변수에서 Cockpit 서버 고유 변수를 제거.
- * Claude Desktop에서 실행 시 ANTHROPIC_API_KEY(빈 값) 등이
- * 자식 프로세스(Claude CLI)에 전달되어 인증 오류를 유발하는 문제 방지.
+ *
+ * - Claude Desktop에서 실행 시 ANTHROPIC_API_KEY(빈 값) 등이 자식 프로세스
+ *   (Claude CLI)에 전달되어 인증 오류를 유발하는 문제 방지.
+ * - NODE_ENV: packaged Electron 이 server 에 NODE_ENV=production 을 주입하는데,
+ *   내장 터미널이 이를 그대로 상속하면 `pnpm install` 시 devDependencies 가
+ *   스킵되는 등 개발 작업이 막히는 부작용. 자식 쉘은 기본값(unset)으로 시작하게 함.
  */
 function cleanEnvForPty(
   env: NodeJS.ProcessEnv,
@@ -115,9 +119,11 @@ function cleanEnvForPty(
     "CLAUDE_INTERNAL_",
     "CLAUDECODE",
   ];
+  const REMOVE_EXACT = new Set(["NODE_ENV"]);
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined) continue;
+    if (REMOVE_EXACT.has(key)) continue;
     if (REMOVE_PREFIXES.some((p) => key.startsWith(p))) continue;
     result[key] = value;
   }

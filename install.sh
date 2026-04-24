@@ -207,6 +207,37 @@ if [[ -x "$STOP_HOOK_SCRIPT" ]]; then
   }
 fi
 
+# PostToolUse(Bash) 훅 등록 — git commit/push 실시간 기록
+COMMIT_HOOK_SCRIPT="$INSTALL_DIR/scripts/claude-commit-hook.sh"
+if [[ -x "$COMMIT_HOOK_SCRIPT" ]]; then
+  node -e '
+    const fs = require("fs");
+    const p = process.argv[1];
+    const hookCmd = process.argv[2];
+    let s = {};
+    try { s = JSON.parse(fs.readFileSync(p, "utf8")); } catch {}
+    s.hooks = s.hooks || {};
+    s.hooks.PostToolUse = s.hooks.PostToolUse || [];
+    const already = s.hooks.PostToolUse.some(e =>
+      (e.hooks || []).some(h => h && h.command && h.command.includes("cockpit-app/scripts/claude-commit-hook.sh"))
+    );
+    if (already) { console.log("ALREADY"); process.exit(0); }
+    s.hooks.PostToolUse.push({
+      matcher: "Bash",
+      hooks: [{ type: "command", command: hookCmd }]
+    });
+    fs.writeFileSync(p, JSON.stringify(s, null, 2));
+    console.log("ADDED");
+  ' "$SETTINGS_FILE" "$COMMIT_HOOK_SCRIPT" 2>/dev/null | {
+    read result
+    case "$result" in
+      ADDED)   log "Claude Code commit 훅 등록 완료 — git commit/push 시 daily.md 에 자동 기록" ;;
+      ALREADY) log "Claude Code commit 훅: 이미 등록됨 — 건너뜀" ;;
+      *)       log "Claude Code commit 훅 등록 스킵 (settings.json 처리 실패 — 무시)" ;;
+    esac
+  }
+fi
+
 # SessionEnd 훅 등록 — conversation-based recap 이 실제로 동작하는 곳
 if [[ -x "$SESSIONEND_HOOK_SCRIPT" ]]; then
   node -e '

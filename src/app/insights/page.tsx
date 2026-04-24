@@ -1,15 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BarChart3, Calendar as CalendarIcon, FileText } from "lucide-react";
+import { BarChart3, Calendar as CalendarIcon, FileText, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjects } from "@/hooks/use-projects";
 import { useActiveProjectStore } from "@/store/active-project-store";
 import { CalendarTab } from "@/components/insights/calendar-tab";
 import { StatsTab } from "@/components/insights/stats-tab";
 import { DailyTab } from "@/components/insights/daily-tab";
+import { DigestTab } from "@/components/insights/digest-tab";
 
-type TabKey = "daily" | "calendar" | "stats";
+type TabKey = "daily" | "calendar" | "stats" | "digest";
 type RangeKey = "7d" | "30d" | "90d";
 
 const RANGES: Record<RangeKey, { label: string; days: number }> = {
@@ -67,6 +68,12 @@ export default function InsightsPage() {
             icon={<BarChart3 size={12} />}
             label="Stats"
           />
+          <TabButton
+            active={tab === "digest"}
+            onClick={() => setTab("digest")}
+            icon={<Sparkles size={12} />}
+            label="Digest"
+          />
         </div>
 
         <div className="flex-1" />
@@ -117,6 +124,8 @@ export default function InsightsPage() {
         <DailyTab />
       ) : tab === "calendar" ? (
         <CalendarTab projectId={projectFilter} />
+      ) : tab === "digest" ? (
+        <DigestTab />
       ) : (
         <StatsTab from={from} to={to} projectId={projectFilter} />
       )}

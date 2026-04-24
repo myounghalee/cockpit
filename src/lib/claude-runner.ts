@@ -328,9 +328,15 @@ class Runner extends EventEmitter {
       this.states.delete(ticketId);
       this.buffers.delete(ticketId);
       try {
+        const data: { status: string; sessionId?: null } = { status: "review" };
+        // 첫 실행이 실패하면 DB에 박힌 sessionId를 롤백.
+        // 그대로 두면 다음 "Claude 열기"가 --resume <없는세션> 을 호출해 "No conversation found"로 깨짐.
+        if (!isResume && code !== 0) {
+          data.sessionId = null;
+        }
         await prisma.ticket.update({
           where: { id: ticketId },
-          data: { status: "review" },
+          data,
         });
       } catch {
         // 삭제된 티켓

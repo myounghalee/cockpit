@@ -11,12 +11,12 @@ import { DailyTab } from "@/components/insights/daily-tab";
 import { DigestTab } from "@/components/insights/digest-tab";
 
 type TabKey = "daily" | "calendar" | "stats" | "digest";
-type RangeKey = "7d" | "30d" | "90d";
+type RangeKey = "1d" | "7d" | "30d";
 
 const RANGES: Record<RangeKey, { label: string; days: number }> = {
+  "1d": { label: "1일", days: 1 },
   "7d": { label: "7일", days: 7 },
   "30d": { label: "30일", days: 30 },
-  "90d": { label: "90일", days: 90 },
 };
 
 export default function InsightsPage() {

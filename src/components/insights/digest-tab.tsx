@@ -16,15 +16,19 @@ import {
   Sparkles,
   Copy,
   Check,
+  Settings,
+  X,
+  RotateCcw,
+  Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizeMarkdown } from "@/lib/markdown-normalize";
 
-type RangeKey = "7d" | "30d" | "90d";
+type RangeKey = "1d" | "7d" | "30d";
 const RANGES: Record<RangeKey, { label: string; days: number }> = {
+  "1d": { label: "1일", days: 1 },
   "7d": { label: "7일", days: 7 },
   "30d": { label: "30일", days: 30 },
-  "90d": { label: "90일", days: 90 },
 };
 
 interface GitCommitEntry {
@@ -57,11 +61,26 @@ function formatDate(iso: string): string {
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => (n < 10 ? `0${n}` : String(n));
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 interface SummaryResponse {
   rangeDays: number;
   from: string;
   to: string;
   markdown: string;
+  generatedAt: string;
+  cached: boolean;
+}
+
+interface PromptResponse {
+  content: string;
+  isCustom: boolean;
+  path: string;
+  default: string;
 }
 
 export function DigestTab() {
@@ -76,6 +95,7 @@ export function DigestTab() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
 
   async function load(r: RangeKey) {
     setLoading(true);
@@ -97,19 +117,32 @@ export function DigestTab() {
     }
   }
 
-  async function generateSummary(r: RangeKey) {
+  async function loadCachedSummary(r: RangeKey) {
+    try {
+      const res = await fetch(
+        `/api/insights/digest/summary?days=${RANGES[r].days}&cacheOnly=1`,
+      );
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json && typeof json.markdown === "string") {
+        setSummary(json as SummaryResponse);
+      }
+    } catch {
+      // cache miss — 조용히 무시
+    }
+  }
+
+  async function generateSummary(r: RangeKey, refresh: boolean) {
     setSummaryLoading(true);
     setSummaryError(null);
     try {
-      const res = await fetch(
-        `/api/insights/digest/summary?days=${RANGES[r].days}`,
-      );
+      const qs = `days=${RANGES[r].days}${refresh ? "&refresh=1" : ""}`;
+      const res = await fetch(`/api/insights/digest/summary?${qs}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
       setSummary(json as SummaryResponse);
     } catch (err) {
       setSummaryError((err as Error).message);
-      setSummary(null);
     } finally {
       setSummaryLoading(false);
     }
@@ -128,9 +161,10 @@ export function DigestTab() {
 
   useEffect(() => {
     load(range);
-    // 범위 바뀌면 기존 요약은 스테일하므로 초기화
+    // 범위 바뀌면 기존 요약 비우고, 캐시 있으면 자동 로드
     setSummary(null);
     setSummaryError(null);
+    loadCachedSummary(range);
   }, [range]);
 
   const toggleProject = (id: string) => {
@@ -168,16 +202,31 @@ export function DigestTab() {
           </span>
         )}
         <button
-          onClick={() => generateSummary(range)}
+          onClick={() => generateSummary(range, !!summary)}
           disabled={summaryLoading || loading || !data}
           className="flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50"
-          title="claude -p 로 이번 기간 요약 생성"
+          title={
+            summary
+              ? "캐시 무시하고 claude -p 로 다시 생성"
+              : "claude -p 로 이번 기간 요약 생성 (같은 날은 자동 캐시)"
+          }
         >
           <Sparkles
             size={12}
             className={summaryLoading ? "animate-pulse" : ""}
           />
-          {summaryLoading ? "정리 중…" : summary ? "AI 정리 재생성" : "AI 정리"}
+          {summaryLoading
+            ? "정리 중…"
+            : summary
+              ? "AI 정리 재생성"
+              : "AI 정리"}
+        </button>
+        <button
+          onClick={() => setShowPromptEditor(true)}
+          className="p-1.5 rounded hover:bg-[var(--color-surface-hover)] text-[var(--color-foreground-muted)]"
+          title="AI 정리 프롬프트 편집"
+        >
+          <Settings size={14} />
         </button>
         <button
           onClick={() => load(range)}
@@ -233,11 +282,26 @@ export function DigestTab() {
         )}
         {summary && (
           <section className="rounded-md border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/5">
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border)] text-xs">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border)] text-xs flex-wrap">
               <Sparkles size={12} className="text-[var(--color-accent)]" />
               <span className="font-medium">AI 정리</span>
               <span className="text-[10px] text-[var(--color-foreground-dim)] font-mono">
                 {summary.from.slice(0, 10)} ~ {summary.to.slice(0, 10)}
+              </span>
+              <span
+                className={cn(
+                  "text-[10px] px-1.5 py-0.5 rounded-sm font-mono",
+                  summary.cached
+                    ? "bg-[var(--color-surface)] text-[var(--color-foreground-dim)]"
+                    : "bg-[var(--color-accent)]/20 text-[var(--color-accent)]",
+                )}
+                title={
+                  summary.cached
+                    ? "저장된 캐시 — 재생성 버튼으로 갱신"
+                    : "방금 생성됨"
+                }
+              >
+                {summary.cached ? "캐시" : "NEW"} · {formatTimestamp(summary.generatedAt)}
               </span>
               <div className="flex-1" />
               <button
@@ -368,6 +432,158 @@ export function DigestTab() {
             </div>
           </section>
         )}
+      </div>
+
+      {showPromptEditor && (
+        <PromptEditorModal onClose={() => setShowPromptEditor(false)} />
+      )}
+    </div>
+  );
+}
+
+function PromptEditorModal({ onClose }: { onClose: () => void }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [content, setContent] = useState("");
+  const [meta, setMeta] = useState<PromptResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/insights/digest/prompt");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as PromptResponse;
+        if (!mounted) return;
+        setMeta(json);
+        setContent(json.content);
+      } catch (err) {
+        if (!mounted) return;
+        setError((err as Error).message);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/insights/digest/prompt", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
+      setSavedAt(new Date().toISOString());
+      // meta 갱신
+      setMeta((prev) =>
+        prev ? { ...prev, content, isCustom: true } : prev,
+      );
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resetToDefault() {
+    if (!meta) return;
+    if (!confirm("기본 프롬프트로 되돌릴까요? 사용자가 편집한 내용은 삭제됩니다.")) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/insights/digest/prompt", {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setContent(meta.default);
+      setMeta({ ...meta, content: meta.default, isCustom: false });
+      setSavedAt(new Date().toISOString());
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[var(--color-background)] border border-[var(--color-border)] rounded-md w-full max-w-3xl max-h-[85vh] flex flex-col shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
+          <Sparkles size={14} className="text-[var(--color-accent)]" />
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm">AI 정리 프롬프트 편집</div>
+            <div className="text-[11px] text-[var(--color-foreground-dim)] font-mono truncate">
+              {meta?.path ?? "~/.cockpit-userdata/digest-prompt.md"}
+              {meta?.isCustom ? " · (사용자 편집됨)" : " · (기본값)"}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-[var(--color-surface-hover)] text-[var(--color-foreground-muted)]"
+            title="닫기"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 min-h-0 flex flex-col p-4 gap-2">
+          <p className="text-[11px] text-[var(--color-foreground-dim)]">
+            말투/구성/섹션을 자유롭게 바꿀 수 있습니다. 프롬프트 끝에 자동으로
+            {" "}<code>---{"\\n"}데이터:{"\\n"}...</code>{" "}섹션이 붙어 커밋·세션·daily
+            내용이 전달돼요. 프롬프트를 바꾸면 기존 캐시는 자동 무효화됩니다.
+          </p>
+          {error && (
+            <div className="text-xs text-red-500">에러: {error}</div>
+          )}
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            disabled={loading}
+            className="flex-1 min-h-[300px] w-full resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+            placeholder={loading ? "로딩 중…" : "프롬프트 내용"}
+            spellCheck={false}
+          />
+          <div className="flex items-center gap-2 pt-1">
+            {savedAt && (
+              <span className="text-[10px] text-[var(--color-foreground-dim)]">
+                저장됨 · {formatTimestamp(savedAt)}
+              </span>
+            )}
+            <div className="flex-1" />
+            <button
+              onClick={resetToDefault}
+              disabled={saving || loading || !meta?.isCustom}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-md text-xs border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)] disabled:opacity-50"
+              title="기본 프롬프트로 되돌리기"
+            >
+              <RotateCcw size={12} />
+              기본값
+            </button>
+            <button
+              onClick={save}
+              disabled={saving || loading || !content.trim()}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-md text-xs bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50"
+            >
+              <Save size={12} />
+              {saving ? "저장 중…" : "저장"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

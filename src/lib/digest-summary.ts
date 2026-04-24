@@ -14,6 +14,7 @@
  *   없으면 DEFAULT_PROMPT_TEMPLATE 사용.
  */
 import { spawn } from "child_process";
+import crypto from "crypto";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -24,6 +25,12 @@ const USERDATA_DIR = path.join(os.homedir(), ".cockpit-userdata");
 const CACHE_DIR = path.join(USERDATA_DIR, "digest-summary");
 const PROMPT_FILE = path.join(USERDATA_DIR, "digest-prompt.md");
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  at: string; // ISO
+}
+
 export interface DigestSummaryResult {
   rangeDays: number;
   from: string;
@@ -32,6 +39,8 @@ export interface DigestSummaryResult {
   digest: DigestResult;
   generatedAt: string;
   cached: boolean;
+  sessionId: string;
+  messages: ChatMessage[];
 }
 
 function rangeLabel(days: number): string {
@@ -124,6 +133,8 @@ interface CacheEntry {
   digest: DigestResult;
   generatedAt: string;
   promptHash: string;
+  sessionId: string;
+  messages: ChatMessage[];
 }
 
 function hashPrompt(s: string): string {
@@ -210,9 +221,18 @@ function buildContext(digest: DigestResult): string {
   return parts.join("\n");
 }
 
-function invokeClaude(prompt: string): Promise<string> {
+interface ClaudeOptions {
+  sessionId?: string;
+  resume?: string;
+}
+
+function invokeClaude(prompt: string, opts: ClaudeOptions = {}): Promise<string> {
+  const args = ["-p", "--output-format", "text"];
+  if (opts.resume) args.push("--resume", opts.resume);
+  else if (opts.sessionId) args.push("--session-id", opts.sessionId);
+
   return new Promise((resolve, reject) => {
-    const child = spawn("claude", ["-p", "--output-format", "text"], {
+    const child = spawn("claude", args, {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -261,6 +281,23 @@ export interface BuildOptions {
   refresh?: boolean;
 }
 
+function entryToResult(
+  entry: CacheEntry,
+  cached: boolean,
+): DigestSummaryResult {
+  return {
+    rangeDays: entry.rangeDays,
+    from: entry.from,
+    to: entry.to,
+    markdown: entry.markdown,
+    digest: entry.digest,
+    generatedAt: entry.generatedAt,
+    cached,
+    sessionId: entry.sessionId,
+    messages: entry.messages ?? [],
+  };
+}
+
 /** 캐시만 조회 (없으면 null). 생성은 안 함. */
 export function peekDigestSummaryCache(days: number): DigestSummaryResult | null {
   const now = new Date();
@@ -270,15 +307,9 @@ export function peekDigestSummaryCache(days: number): DigestSummaryResult | null
   // 프롬프트가 바뀐 경우 스테일 처리
   const tpl = loadPromptTemplate();
   if (entry.promptHash !== hashPrompt(tpl.content)) return null;
-  return {
-    rangeDays: entry.rangeDays,
-    from: entry.from,
-    to: entry.to,
-    markdown: entry.markdown,
-    digest: entry.digest,
-    generatedAt: entry.generatedAt,
-    cached: true,
-  };
+  // 과거 버전 캐시 호환 — sessionId 없으면 무시
+  if (!entry.sessionId) return null;
+  return entryToResult(entry, true);
 }
 
 export async function buildDigestSummary(
@@ -298,9 +329,12 @@ export async function buildDigestSummary(
   const context = buildContext(digest);
   const prompt = intro + "\n" + tpl.content + "\n---\n데이터:\n" + context;
 
+  // 새 세션 생성 — 후속 대화를 --resume 으로 이어갈 수 있게
+  const sessionId = crypto.randomUUID();
+
   let markdown: string;
   try {
-    markdown = await invokeClaude(prompt);
+    markdown = await invokeClaude(prompt, { sessionId });
   } catch (err) {
     throw new Error(
       `claude CLI 호출 실패: ${(err as Error).message}. (claude 가 PATH 에 있는지 확인)`,
@@ -319,18 +353,54 @@ export async function buildDigestSummary(
     digest,
     generatedAt: new Date().toISOString(),
     promptHash: hashPrompt(tpl.content),
+    sessionId,
+    messages: [],
   };
 
   const now = new Date();
   writeCache(cacheKey(days, now), entry);
 
-  return {
-    rangeDays: days,
-    from: entry.from,
-    to: entry.to,
-    markdown,
-    digest,
-    generatedAt: entry.generatedAt,
-    cached: false,
-  };
+  return entryToResult(entry, false);
+}
+
+/**
+ * 캐시된 summary 의 Claude 세션에 후속 메시지를 보낸다.
+ * --resume 으로 컨텍스트(초기 summary 프롬프트 + 응답 + 이전 후속 대화)를 이어감.
+ */
+export async function chatWithDigest(
+  days: number,
+  userMessage: string,
+): Promise<DigestSummaryResult> {
+  const msg = userMessage.trim();
+  if (!msg) throw new Error("메시지가 비어있음");
+
+  const now = new Date();
+  const key = cacheKey(days, now);
+  const entry = readCache(key);
+  if (!entry || !entry.sessionId) {
+    throw new Error(
+      "이어갈 세션이 없음 — 먼저 AI 정리를 생성하세요.",
+    );
+  }
+
+  let reply: string;
+  try {
+    reply = await invokeClaude(msg, { resume: entry.sessionId });
+  } catch (err) {
+    throw new Error(
+      `claude --resume 호출 실패: ${(err as Error).message}`,
+    );
+  }
+  if (!reply) throw new Error("AI 응답이 비어있음");
+
+  const nowIso = new Date().toISOString();
+  const messages: ChatMessage[] = [
+    ...(entry.messages ?? []),
+    { role: "user", content: msg, at: nowIso },
+    { role: "assistant", content: reply, at: new Date().toISOString() },
+  ];
+
+  const next: CacheEntry = { ...entry, messages };
+  writeCache(key, next);
+  return entryToResult(next, true);
 }

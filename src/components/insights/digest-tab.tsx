@@ -20,6 +20,9 @@ import {
   X,
   RotateCcw,
   Save,
+  Send,
+  User,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizeMarkdown } from "@/lib/markdown-normalize";
@@ -67,6 +70,12 @@ function formatTimestamp(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  at: string;
+}
+
 interface SummaryResponse {
   rangeDays: number;
   from: string;
@@ -74,6 +83,8 @@ interface SummaryResponse {
   markdown: string;
   generatedAt: string;
   cached: boolean;
+  sessionId: string;
+  messages: ChatMessage[];
 }
 
 interface PromptResponse {
@@ -96,6 +107,9 @@ export function DigestTab() {
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   async function load(r: RangeKey) {
     setLoading(true);
@@ -105,10 +119,8 @@ export function DigestTab() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = (await res.json()) as DigestResponse;
       setData(json);
-      // 처음엔 상위 3개 프로젝트만 펼침
-      setExpandedProject(
-        new Set(json.commitsByProject.slice(0, 3).map((p) => p.projectId)),
-      );
+      // default: 모두 접힌 상태. 사용자가 필요한 것만 펼치도록.
+      setExpandedProject(new Set());
     } catch (err) {
       setError((err as Error).message);
       setData(null);
@@ -159,11 +171,50 @@ export function DigestTab() {
     }
   }
 
+  async function sendChat() {
+    const msg = chatInput.trim();
+    if (!msg || !summary || chatSending) return;
+    setChatSending(true);
+    setChatError(null);
+    // 낙관적 추가 (UX — 응답 도착 전에도 내 메시지가 보이도록)
+    const optimistic: ChatMessage = {
+      role: "user",
+      content: msg,
+      at: new Date().toISOString(),
+    };
+    setSummary({ ...summary, messages: [...summary.messages, optimistic] });
+    setChatInput("");
+    try {
+      const res = await fetch("/api/insights/digest/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          days: RANGES[range].days,
+          message: msg,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
+      setSummary(json as SummaryResponse);
+    } catch (err) {
+      setChatError((err as Error).message);
+      // 실패 시 낙관 추가 롤백
+      setSummary((prev) =>
+        prev ? { ...prev, messages: prev.messages.slice(0, -1) } : prev,
+      );
+      setChatInput(msg);
+    } finally {
+      setChatSending(false);
+    }
+  }
+
   useEffect(() => {
     load(range);
-    // 범위 바뀌면 기존 요약 비우고, 캐시 있으면 자동 로드
+    // 범위 바뀌면 기존 요약/chat 상태 비우고, 캐시 있으면 자동 로드
     setSummary(null);
     setSummaryError(null);
+    setChatInput("");
+    setChatError(null);
     loadCachedSummary(range);
   }, [range]);
 
@@ -327,6 +378,108 @@ export function DigestTab() {
                 {normalizeMarkdown(summary.markdown)}
               </ReactMarkdown>
             </article>
+          </section>
+        )}
+
+        {/* Chat — 요약 세션 이어가기 */}
+        {summary && (
+          <section className="rounded-md border border-[var(--color-border)]">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-foreground-dim)]">
+              <Bot size={12} />
+              후속 대화 · {summary.messages.length}개 메시지
+              <span className="text-[10px] font-mono opacity-60">
+                · session {summary.sessionId.slice(0, 8)}
+              </span>
+            </div>
+            {summary.messages.length > 0 && (
+              <ul className="divide-y divide-[var(--color-border)] max-h-[480px] overflow-y-auto">
+                {summary.messages.map((m, idx) => (
+                  <li
+                    key={`${m.at}-${idx}`}
+                    className={cn(
+                      "px-4 py-3 text-sm flex gap-3",
+                      m.role === "user"
+                        ? "bg-[var(--color-surface)]/50"
+                        : "bg-transparent",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center",
+                        m.role === "user"
+                          ? "bg-[var(--color-accent)]/20 text-[var(--color-accent)]"
+                          : "bg-[var(--color-surface)] text-[var(--color-foreground-muted)]",
+                      )}
+                    >
+                      {m.role === "user" ? (
+                        <User size={12} />
+                      ) : (
+                        <Bot size={12} />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      {m.role === "assistant" ? (
+                        <article className="markdown-body text-sm">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkBreaks]}
+                          >
+                            {normalizeMarkdown(m.content)}
+                          </ReactMarkdown>
+                        </article>
+                      ) : (
+                        <div className="whitespace-pre-wrap break-words">
+                          {m.content}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+                {chatSending && (
+                  <li className="px-4 py-3 text-sm flex gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center bg-[var(--color-surface)] text-[var(--color-foreground-muted)]">
+                      <Bot size={12} className="animate-pulse" />
+                    </div>
+                    <div className="text-[var(--color-foreground-dim)] italic">
+                      답변 생성 중…
+                    </div>
+                  </li>
+                )}
+              </ul>
+            )}
+            {chatError && (
+              <div className="px-4 py-2 text-xs text-red-500 border-t border-[var(--color-border)]">
+                {chatError}
+              </div>
+            )}
+            <div className="p-3 border-t border-[var(--color-border)] flex items-end gap-2">
+              <textarea
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (
+                    e.key === "Enter" &&
+                    (e.metaKey || e.ctrlKey) &&
+                    !chatSending
+                  ) {
+                    e.preventDefault();
+                    void sendChat();
+                  }
+                }}
+                placeholder="이 정리에 대해 추가로 물어보기 (예: FNF 프로젝트만 더 자세히 / 주간보고 포맷으로 다시 써줘) — ⌘/Ctrl+Enter 로 전송"
+                rows={2}
+                disabled={chatSending}
+                className="flex-1 resize-none rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] disabled:opacity-60"
+              />
+              <button
+                onClick={() => void sendChat()}
+                disabled={chatSending || !chatInput.trim()}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-md text-xs bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50"
+                title="⌘/Ctrl+Enter"
+              >
+                <Send size={12} />
+                {chatSending ? "전송 중…" : "보내기"}
+              </button>
+            </div>
           </section>
         )}
 

@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 import {
   RefreshCw,
   GitCommit,
@@ -10,8 +13,12 @@ import {
   Calendar as CalendarIcon,
   ChevronRight,
   ChevronDown,
+  Sparkles,
+  Copy,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { normalizeMarkdown } from "@/lib/markdown-normalize";
 
 type RangeKey = "7d" | "30d" | "90d";
 const RANGES: Record<RangeKey, { label: string; days: number }> = {
@@ -50,6 +57,13 @@ function formatDate(iso: string): string {
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+interface SummaryResponse {
+  rangeDays: number;
+  from: string;
+  to: string;
+  markdown: string;
+}
+
 export function DigestTab() {
   const [range, setRange] = useState<RangeKey>("7d");
   const [data, setData] = useState<DigestResponse | null>(null);
@@ -58,6 +72,10 @@ export function DigestTab() {
   const [expandedProject, setExpandedProject] = useState<Set<string>>(
     new Set(),
   );
+  const [summary, setSummary] = useState<SummaryResponse | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function load(r: RangeKey) {
     setLoading(true);
@@ -79,8 +97,40 @@ export function DigestTab() {
     }
   }
 
+  async function generateSummary(r: RangeKey) {
+    setSummaryLoading(true);
+    setSummaryError(null);
+    try {
+      const res = await fetch(
+        `/api/insights/digest/summary?days=${RANGES[r].days}`,
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? `HTTP ${res.status}`);
+      setSummary(json as SummaryResponse);
+    } catch (err) {
+      setSummaryError((err as Error).message);
+      setSummary(null);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
+
+  async function copySummary() {
+    if (!summary) return;
+    try {
+      await navigator.clipboard.writeText(summary.markdown);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore
+    }
+  }
+
   useEffect(() => {
     load(range);
+    // 범위 바뀌면 기존 요약은 스테일하므로 초기화
+    setSummary(null);
+    setSummaryError(null);
   }, [range]);
 
   const toggleProject = (id: string) => {
@@ -118,6 +168,18 @@ export function DigestTab() {
           </span>
         )}
         <button
+          onClick={() => generateSummary(range)}
+          disabled={summaryLoading || loading || !data}
+          className="flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs bg-[var(--color-accent)] text-white hover:opacity-90 disabled:opacity-50"
+          title="claude -p 로 이번 기간 요약 생성"
+        >
+          <Sparkles
+            size={12}
+            className={summaryLoading ? "animate-pulse" : ""}
+          />
+          {summaryLoading ? "정리 중…" : summary ? "AI 정리 재생성" : "AI 정리"}
+        </button>
+        <button
           onClick={() => load(range)}
           disabled={loading}
           className="p-1.5 rounded hover:bg-[var(--color-surface-hover)] text-[var(--color-foreground-muted)] disabled:opacity-50"
@@ -152,6 +214,56 @@ export function DigestTab() {
               sub="일자"
             />
           </div>
+        )}
+
+        {/* AI 정리 */}
+        {summaryError && (
+          <div className="rounded-md border border-red-500/40 bg-red-500/5 p-3 text-xs text-red-500">
+            AI 정리 생성 실패: {summaryError}
+          </div>
+        )}
+        {summaryLoading && !summary && (
+          <div className="rounded-md border border-[var(--color-border)] p-6 text-center text-sm text-[var(--color-foreground-dim)]">
+            <Sparkles
+              size={16}
+              className="inline-block mr-2 animate-pulse text-[var(--color-accent)]"
+            />
+            claude CLI 로 정리 중… (보통 10~30초 소요)
+          </div>
+        )}
+        {summary && (
+          <section className="rounded-md border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/5">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border)] text-xs">
+              <Sparkles size={12} className="text-[var(--color-accent)]" />
+              <span className="font-medium">AI 정리</span>
+              <span className="text-[10px] text-[var(--color-foreground-dim)] font-mono">
+                {summary.from.slice(0, 10)} ~ {summary.to.slice(0, 10)}
+              </span>
+              <div className="flex-1" />
+              <button
+                onClick={copySummary}
+                className="flex items-center gap-1 px-2 h-6 rounded text-[11px] hover:bg-[var(--color-surface-hover)] text-[var(--color-foreground-muted)]"
+                title="마크다운 복사"
+              >
+                {copied ? (
+                  <>
+                    <Check size={11} />
+                    복사됨
+                  </>
+                ) : (
+                  <>
+                    <Copy size={11} />
+                    복사
+                  </>
+                )}
+              </button>
+            </div>
+            <article className="markdown-body px-5 py-4 text-sm text-[var(--color-foreground)]">
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                {normalizeMarkdown(summary.markdown)}
+              </ReactMarkdown>
+            </article>
+          </section>
         )}
 
         {/* 커밋 — 프로젝트별 */}

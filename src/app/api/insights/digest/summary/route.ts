@@ -5,8 +5,8 @@ import {
 } from "@/lib/digest-summary";
 
 export const dynamic = "force-dynamic";
-// claude -p 호출이 길어질 수 있음
-export const maxDuration = 180;
+// claude -p 호출이 길어질 수 있음 (컨텍스트 많거나 긴 응답)
+export const maxDuration = 300;
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

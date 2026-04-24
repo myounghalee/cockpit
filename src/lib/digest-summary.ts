@@ -251,8 +251,8 @@ function invokeClaude(prompt: string, opts: ClaudeOptions = {}): Promise<string>
 
     const timeout = setTimeout(() => {
       child.kill("SIGTERM");
-      reject(new Error("claude CLI 타임아웃 (120s)"));
-    }, 120_000);
+      reject(new Error("claude CLI 타임아웃 (300s)"));
+    }, 300_000);
 
     child.on("error", (err) => {
       clearTimeout(timeout);

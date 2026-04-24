@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { chatWithDigest } from "@/lib/digest-summary";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 180;
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   try {

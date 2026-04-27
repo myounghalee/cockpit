@@ -5,6 +5,7 @@ import {
   readDailyFile,
   todayKey,
 } from "@/lib/daily-log";
+import { prisma } from "@/lib/prisma";
 
 /**
  * GET /api/insights/daily?date=YYYY-MM-DD
@@ -33,7 +34,21 @@ interface ActivityBody {
   title?: string;
   details?: string | null;
   projectName?: string | null;
+  /** Claude Code 훅처럼 cwd 만 알 때 — projectName 미지정 시 path 매칭으로 보강. */
+  cwd?: string | null;
   tags?: string;
+}
+
+async function resolveProjectName(cwd: string): Promise<string | null> {
+  try {
+    const project = await prisma.project.findUnique({
+      where: { path: cwd },
+      select: { name: true },
+    });
+    return project?.name ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
@@ -46,11 +61,17 @@ export async function POST(request: Request) {
   if (!body.title?.trim()) {
     return NextResponse.json({ error: "title is required" }, { status: 400 });
   }
+
+  let projectName = body.projectName?.trim() || null;
+  if (!projectName && body.cwd?.trim()) {
+    projectName = await resolveProjectName(body.cwd.trim());
+  }
+
   appendDailyEntry({
     kind: "activity",
     title: body.title.trim(),
     details: body.details ?? null,
-    projectName: body.projectName ?? null,
+    projectName,
     tags: body.tags,
   });
   return NextResponse.json({ ok: true, date: todayKey() }, { status: 201 });

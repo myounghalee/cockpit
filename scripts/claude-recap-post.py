@@ -23,6 +23,13 @@ def main() -> None:
     if not raw.strip():
         return
 
+    # 파서가 맨 앞에 `---CWD:<path>---` 한 줄을 줄 수 있음 (선택). 한 transcript = 한 cwd.
+    cwd: str | None = None
+    cwd_m = re.match(r"^---CWD:(.+?)---\s*\n", raw)
+    if cwd_m:
+        cwd = cwd_m.group(1).strip() or None
+        raw = raw[cwd_m.end():]
+
     blocks = raw.split("---NEXT---")
     for block in blocks:
         block = block.strip()
@@ -41,14 +48,19 @@ def main() -> None:
 
         head_match = re.split(r"(?<=[.!?。])\s+", text, maxsplit=1)
         head = head_match[0] if head_match else text
+        # 본문에서 head 를 제외한 나머지 = 진짜 추가 정보. 없으면 details 생략 (중복 방지).
+        remainder = head_match[1].strip() if len(head_match) > 1 else ""
         if len(head) > 140:
             head = head[:137] + "…"
 
-        payload = {
+        payload: dict[str, object] = {
             "title": head,
-            "details": text[:1500],
             "tags": "auto,recap,claude",
         }
+        if remainder:
+            payload["details"] = remainder[:1500]
+        if cwd:
+            payload["cwd"] = cwd
         body = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/insights/daily",

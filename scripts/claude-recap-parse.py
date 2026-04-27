@@ -59,6 +59,19 @@ def session_id_from_path(path: str) -> str:
     return base
 
 
+def extract_cwd(lines: list[str]) -> str | None:
+    """transcript 라인 중 cwd 필드가 있는 첫 이벤트에서 cwd 추출."""
+    for line in lines:
+        try:
+            ev = json.loads(line)
+        except Exception:
+            continue
+        cwd = ev.get("cwd")
+        if isinstance(cwd, str) and cwd:
+            return cwd
+    return None
+
+
 def extract_recaps(lines: list[str]) -> list[tuple[str, str]]:
     """transcript 라인에서 (uuid, recap_text) 튜플 추출 (중복 제거 전)."""
     events: list[dict[str, Any]] = []
@@ -136,8 +149,12 @@ def main() -> None:
     if not new_entries:
         return
 
-    # 출력
-    out = []
+    cwd = extract_cwd(lines)
+
+    # 출력 — 맨 앞에 CWD 한 줄(선택), 그 뒤 블록들.
+    out: list[str] = []
+    if cwd:
+        out.append(f"---CWD:{cwd}---")
     for idx, (uuid, text) in enumerate(new_entries):
         if idx > 0:
             out.append("---NEXT---")

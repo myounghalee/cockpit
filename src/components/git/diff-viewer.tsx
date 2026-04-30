@@ -193,14 +193,17 @@ function Cell({
   side: "left" | "right";
 }) {
   const empty = line === null;
-  const bg =
-    !empty &&
-    ((side === "left" && line!.type === "del") ||
-      (side === "right" && line!.type === "add"))
-      ? side === "left"
-        ? "bg-[var(--color-danger)]/10"
-        : "bg-[var(--color-success)]/10"
-      : "";
+  const isDel = !empty && side === "left" && line!.type === "del";
+  const isAdd = !empty && side === "right" && line!.type === "add";
+  // 라이트/다크 양쪽 모두에서 충분한 대비가 나도록 채도 18%로 (이전 10% 는 라이트 모드에서
+  // 거의 안 보였음). 빈 빈줄 셀에는 옅은 줄 배경을 깔아 left/right 가 분리되어 보이게.
+  const bg = isDel
+    ? "bg-[var(--color-danger)]/18"
+    : isAdd
+      ? "bg-[var(--color-success)]/18"
+      : empty
+        ? "bg-[var(--color-surface)]/40"
+        : "";
   const no = side === "left" ? line?.oldNo : line?.newNo;
   return (
     <>

@@ -69,8 +69,18 @@ export interface DiffHunk {
   lines: DiffLine[];
 }
 
+export interface DiffMeta {
+  isNew: boolean;
+  isDeleted: boolean;
+  isBinary: boolean;
+  isRename: boolean;
+  oldMode?: string;
+  newMode?: string;
+}
+
 export interface DiffResponse {
   oversize: boolean;
   size: number;
   hunks: DiffHunk[];
+  meta: DiffMeta;
 }

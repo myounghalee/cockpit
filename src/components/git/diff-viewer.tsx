@@ -76,7 +76,45 @@ export function DiffViewer({
       </div>
     );
   }
+  const meta = data.meta;
   if (data.hunks.length === 0) {
+    if (meta?.isBinary) {
+      return (
+        <div className="p-6 text-xs text-[var(--color-foreground-dim)] flex flex-col gap-1">
+          <span className="text-[var(--color-foreground-muted)]">바이너리 파일</span>
+          <span>
+            {meta.isNew
+              ? "새 바이너리 파일이 추가되었습니다."
+              : meta.isDeleted
+                ? "바이너리 파일이 삭제되었습니다."
+                : "바이너리 파일이 변경되었습니다."}
+            {data.size > 0 && ` (${formatBytes(data.size)})`}
+          </span>
+        </div>
+      );
+    }
+    if (meta?.isNew) {
+      return (
+        <div className="p-6 text-xs text-[var(--color-foreground-dim)] flex flex-col gap-1">
+          <span className="text-[var(--color-success)]">+ 새 빈 파일</span>
+          <span>내용 없는 파일이 추가되었습니다.</span>
+        </div>
+      );
+    }
+    if (meta?.isDeleted) {
+      return (
+        <div className="p-6 text-xs text-[var(--color-foreground-dim)] flex flex-col gap-1">
+          <span className="text-[var(--color-danger)]">− 빈 파일 삭제</span>
+        </div>
+      );
+    }
+    if (meta?.isRename) {
+      return (
+        <div className="p-6 text-xs text-[var(--color-foreground-dim)]">
+          이름만 변경되었습니다 (내용 동일).
+        </div>
+      );
+    }
     return (
       <div className="p-6 text-xs text-[var(--color-foreground-dim)]">
         변경 없음
@@ -86,11 +124,33 @@ export function DiffViewer({
 
   return (
     <div className="font-mono text-xs">
+      {meta?.isNew && (
+        <div className="px-3 py-1.5 text-[10px] bg-[var(--color-success)]/10 text-[var(--color-success)] border-b border-[var(--color-border)]">
+          새 파일 (+{countAddedLines(data.hunks)} lines)
+        </div>
+      )}
+      {meta?.isDeleted && (
+        <div className="px-3 py-1.5 text-[10px] bg-[var(--color-danger)]/10 text-[var(--color-danger)] border-b border-[var(--color-border)]">
+          삭제된 파일
+        </div>
+      )}
       {data.hunks.map((hunk, hi) => (
         <HunkView key={hi} hunk={hunk} />
       ))}
     </div>
   );
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function countAddedLines(hunks: DiffHunk[]): number {
+  let n = 0;
+  for (const h of hunks) for (const l of h.lines) if (l.type === "add") n++;
+  return n;
 }
 
 function HunkView({ hunk }: { hunk: DiffHunk }) {

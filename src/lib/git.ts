@@ -10,6 +10,7 @@ import type {
   CommitDetail,
   DiffHunk,
   DiffLine,
+  DiffMeta,
   FileChange,
   GraphCommit,
   RepoStatus,
@@ -297,6 +298,37 @@ export async function getFileDiff(
     return { size, oversize: true, text: "" };
   }
   return { size, oversize: false, text };
+}
+
+// ─── Diff 메타데이터 추출 ─────────────────────────────────────
+
+/**
+ * unified diff 헤더(diff/index/mode/Binary/rename 등)에서 파일 상태를 추출.
+ * 새 파일이지만 빈 파일이거나 바이너리인 경우 hunk가 없어 UI가 "변경 없음"으로 보이는 문제를
+ * 명시적으로 구분하기 위해 사용.
+ */
+export function parseDiffMeta(text: string): DiffMeta {
+  const meta: DiffMeta = {
+    isNew: false,
+    isDeleted: false,
+    isBinary: false,
+    isRename: false,
+  };
+  for (const line of text.split("\n")) {
+    if (line.startsWith("@@")) break; // 헤더 영역 끝
+    if (line.startsWith("new file mode")) {
+      meta.isNew = true;
+      meta.newMode = line.slice("new file mode ".length).trim();
+    } else if (line.startsWith("deleted file mode")) {
+      meta.isDeleted = true;
+      meta.oldMode = line.slice("deleted file mode ".length).trim();
+    } else if (line.startsWith("rename from") || line.startsWith("rename to")) {
+      meta.isRename = true;
+    } else if (line.startsWith("Binary files ")) {
+      meta.isBinary = true;
+    }
+  }
+  return meta;
 }
 
 // ─── Unified diff parser → hunks ─────────────────────────────

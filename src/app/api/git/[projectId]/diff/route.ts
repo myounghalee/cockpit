@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getFileDiff, parseUnifiedDiff } from "@/lib/git";
+import { getFileDiff, parseDiffMeta, parseUnifiedDiff } from "@/lib/git";
 
 export async function GET(
   request: Request,
@@ -29,7 +29,12 @@ export async function GET(
       untracked,
     });
     const hunks = oversize ? [] : parseUnifiedDiff(text);
-    return NextResponse.json({ oversize, size, hunks });
+    const meta = oversize
+      ? { isNew: false, isDeleted: false, isBinary: false, isRename: false }
+      : parseDiffMeta(text);
+    // untracked는 항상 새 파일로 취급 (헤더에 'new file mode'가 없을 수 있음)
+    if (untracked) meta.isNew = true;
+    return NextResponse.json({ oversize, size, hunks, meta });
   } catch (err) {
     return NextResponse.json(
       { error: (err as Error).message },

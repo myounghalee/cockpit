@@ -74,6 +74,13 @@ interface TerminalState {
   /** UI 선호도 — 각 탭별 본문 폰트 크기 (px) */
   terminalFontSize: number;
   markdownFontSize: number;
+  /**
+   * 터미널 색상 테마. UI 전체 테마와 별개로 강제 가능.
+   *  - "auto":  콕핏 UI 테마(<html data-theme>)를 그대로 따라감
+   *  - "light": 항상 라이트 팔레트
+   *  - "dark":  항상 다크 팔레트 (전통적 셸 톤 선호 시)
+   */
+  terminalTheme: "auto" | "light" | "dark";
   /** 외부 에디터로 열기 기본값 */
   preferredEditor: string; // "vscode" | "cursor" | "webstorm" | "idea" | "sublime" | "custom"
   customEditorCommand: string;
@@ -110,6 +117,8 @@ interface TerminalState {
   setTerminalFontSize: (px: number) => void;
   /** 마크다운 뷰 폰트 크기 설정 */
   setMarkdownFontSize: (px: number) => void;
+  /** 터미널 테마 설정 */
+  setTerminalTheme: (mode: "auto" | "light" | "dark") => void;
   /** 선호 에디터 설정 */
   setPreferredEditor: (editor: string) => void;
   /** 커스텀 에디터 명령 설정 */
@@ -507,6 +516,7 @@ export const useTerminalStore = create<TerminalState>()(
       recentUrls: [],
       terminalFontSize: 13,
       markdownFontSize: 14,
+      terminalTheme: "auto",
       preferredEditor: "vscode",
       customEditorCommand: "",
 
@@ -816,6 +826,8 @@ export const useTerminalStore = create<TerminalState>()(
         set({ markdownFontSize: v });
       },
 
+      setTerminalTheme: (mode) => set({ terminalTheme: mode }),
+
       setPreferredEditor: (editor) => set({ preferredEditor: editor }),
       setCustomEditorCommand: (cmd) => set({ customEditorCommand: cmd }),
 
@@ -1041,6 +1053,7 @@ export const useTerminalStore = create<TerminalState>()(
         recentUrls: s.recentUrls,
         terminalFontSize: s.terminalFontSize,
         markdownFontSize: s.markdownFontSize,
+        terminalTheme: s.terminalTheme,
         preferredEditor: s.preferredEditor,
         customEditorCommand: s.customEditorCommand,
       }),

@@ -71,11 +71,12 @@ const XTERM_THEME_LIGHT = {
 } as const;
 
 /**
- * 현재 적용된 테마 ("light" | "dark") 를 반환.
- * theme-store 의 user 설정이 "system" 이면 prefers-color-scheme 으로 fallback.
- * `<html data-theme="...">` 속성을 단일 진실 원천으로 봄 (theme-store 가 항상 갱신).
+ * 터미널 표시에 쓸 테마를 결정.
+ *  - override === "light" / "dark" 면 그 값 강제 (UI 테마 무시)
+ *  - "auto" (기본) 면 `<html data-theme>` 우선, "system" 인 경우 OS prefers-color-scheme.
  */
-function resolveTheme(): "light" | "dark" {
+function resolveTheme(override: "auto" | "light" | "dark"): "light" | "dark" {
+  if (override === "light" || override === "dark") return override;
   if (typeof document === "undefined") return "dark";
   const attr = document.documentElement.getAttribute("data-theme");
   if (attr === "light" || attr === "dark") return attr;
@@ -108,6 +109,7 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
   const splitPane = useTerminalStore((s) => s.splitPane);
   const closePane = useTerminalStore((s) => s.closePane);
   const fontSize = useTerminalStore((s) => s.terminalFontSize);
+  const terminalTheme = useTerminalStore((s) => s.terminalTheme);
   const setPaneStatus = useTerminalStore((s) => s.setPaneStatus);
   const recordPaneNotification = useTerminalStore(
     (s) => s.recordPaneNotification,
@@ -121,12 +123,15 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
   // 생성 시점에만 초기값을 쓰도록 ref로 분리 — 변경은 별도 effect에서 동적으로 반영
   const fontSizeRef = useRef(fontSize);
   fontSizeRef.current = fontSize;
+  // 사용자 테마 override 도 ref 로. setting 변경 시 effect 재실행 없이 applyThemeToTerm 만 다시 호출.
+  const terminalThemeRef = useRef(terminalTheme);
+  terminalThemeRef.current = terminalTheme;
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     const term = new Terminal({
-      theme: xtermThemeFor(resolveTheme()),
+      theme: xtermThemeFor(resolveTheme(terminalThemeRef.current)),
       fontFamily: '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace',
       fontSize: fontSizeRef.current,
       lineHeight: 1.2,
@@ -139,7 +144,7 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
 
     // 테마 동적 추적 — `<html data-theme>` 속성 변경 + OS prefers-color-scheme 변경에 반응.
     const applyThemeToTerm = () => {
-      term.options.theme = xtermThemeFor(resolveTheme());
+      term.options.theme = xtermThemeFor(resolveTheme(terminalThemeRef.current));
     };
     const themeObserver = new MutationObserver(applyThemeToTerm);
     themeObserver.observe(document.documentElement, {
@@ -292,6 +297,12 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
       termRef.current.focus();
     }
   }, [isActive]);
+
+  // 사용자가 설정에서 터미널 테마를 바꾸면 즉시 반영.
+  useEffect(() => {
+    if (!termRef.current) return;
+    termRef.current.options.theme = xtermThemeFor(resolveTheme(terminalTheme));
+  }, [terminalTheme]);
 
   // 외부 (terminal-workspace의 Enter 단축키 등) 에서 특정 pane 으로 포커스 요청
   useEffect(() => {

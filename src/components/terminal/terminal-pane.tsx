@@ -21,8 +21,8 @@ import { MemoPicker } from "./memo-picker";
 import { usePaneDnd } from "./use-pane-dnd";
 import { cn } from "@/lib/utils";
 
-// xterm 다크 테마 — globals.css 변수와 맞춤
-const XTERM_THEME = {
+// xterm 테마 — globals.css 의 light/dark 팔레트와 결을 맞춤
+const XTERM_THEME_DARK = {
   background: "#0b0d12",
   foreground: "#e6e8ee",
   cursor: "#4f8cff",
@@ -45,6 +45,53 @@ const XTERM_THEME = {
   brightCyan: "#67e8f9",
   brightWhite: "#f5f7fa",
 } as const;
+
+const XTERM_THEME_LIGHT = {
+  background: "#ffffff",
+  foreground: "#1a1d24",
+  cursor: "#2563eb",
+  cursorAccent: "#ffffff",
+  selectionBackground: "#2563eb33",
+  black: "#1a1d24",
+  red: "#dc2626",
+  green: "#16a34a",
+  yellow: "#d97706",
+  blue: "#2563eb",
+  magenta: "#9333ea",
+  cyan: "#0891b2",
+  white: "#5c6370",
+  brightBlack: "#9ca3af",
+  brightRed: "#ef4444",
+  brightGreen: "#22c55e",
+  brightYellow: "#f59e0b",
+  brightBlue: "#3b82f6",
+  brightMagenta: "#a855f7",
+  brightCyan: "#06b6d4",
+  brightWhite: "#1a1d24",
+} as const;
+
+/**
+ * 현재 적용된 테마 ("light" | "dark") 를 반환.
+ * theme-store 의 user 설정이 "system" 이면 prefers-color-scheme 으로 fallback.
+ * `<html data-theme="...">` 속성을 단일 진실 원천으로 봄 (theme-store 가 항상 갱신).
+ */
+function resolveTheme(): "light" | "dark" {
+  if (typeof document === "undefined") return "dark";
+  const attr = document.documentElement.getAttribute("data-theme");
+  if (attr === "light" || attr === "dark") return attr;
+  // "system" 또는 미설정 → OS 환경
+  if (
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-color-scheme: light)").matches
+  ) {
+    return "light";
+  }
+  return "dark";
+}
+
+function xtermThemeFor(mode: "light" | "dark") {
+  return mode === "light" ? XTERM_THEME_LIGHT : XTERM_THEME_DARK;
+}
 
 interface TerminalPaneProps {
   pane: TerminalPaneType;
@@ -79,7 +126,7 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
     if (!containerRef.current) return;
 
     const term = new Terminal({
-      theme: XTERM_THEME,
+      theme: xtermThemeFor(resolveTheme()),
       fontFamily: '"JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace',
       fontSize: fontSizeRef.current,
       lineHeight: 1.2,
@@ -89,6 +136,19 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
       allowProposedApi: true,
       macOptionIsMeta: true,
     });
+
+    // 테마 동적 추적 — `<html data-theme>` 속성 변경 + OS prefers-color-scheme 변경에 반응.
+    const applyThemeToTerm = () => {
+      term.options.theme = xtermThemeFor(resolveTheme());
+    };
+    const themeObserver = new MutationObserver(applyThemeToTerm);
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    const mql = window.matchMedia?.("(prefers-color-scheme: light)");
+    const onSystemThemeChange = () => applyThemeToTerm();
+    mql?.addEventListener?.("change", onSystemThemeChange);
 
     const fit = new FitAddon();
     const webLinks = new WebLinksAddon();
@@ -213,6 +273,8 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
 
     return () => {
       resizeObserver.disconnect();
+      themeObserver.disconnect();
+      mql?.removeEventListener?.("change", onSystemThemeChange);
       if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
       if (resizeRafId != null) cancelAnimationFrame(resizeRafId);
       onData.dispose();

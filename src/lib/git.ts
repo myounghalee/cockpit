@@ -362,8 +362,10 @@ export function parseUnifiedDiff(text: string): DiffHunk[] {
     }
     if (!current) continue;
 
-    if (line.startsWith("+++") || line.startsWith("---")) continue;
-    if (line.startsWith("diff ") || line.startsWith("index ")) continue;
+    // 주의: hunk 안에서는 `+++`/`---` 로 시작하는 라인을 스킵하면 안 된다.
+    // 파일 헤더(`--- a/foo`, `+++ b/foo`) 는 항상 `@@` 보다 앞에 오므로
+    // 위의 `if (!current) continue;` 가 이미 걸러준다. hunk 안에서 만나는
+    // `+++` / `---` 는 markdown 등의 실제 콘텐츠 (예: `---` HR 삭제 → diff `----`).
     if (line.startsWith("\\ ")) continue; // "\ No newline at end of file"
 
     const type = line.startsWith("+")

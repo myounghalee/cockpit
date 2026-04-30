@@ -565,13 +565,25 @@ export const useTerminalStore = create<TerminalState>()(
         set((s) => {
           const prev = s.paneStatuses[paneId];
           const at = Date.now();
+          // 이 pane 이 현재 활성 탭에 속하면 사용자가 이미 보고 있는 상태 →
+          // ring/dot 깜빡임 트리거 안 함 (cmux 와 동일 원칙).
+          // 그래도 lastNotification 자체는 기록해서 툴팁/히스토리 용도로 보존.
+          const owningTab = s.tabs.find((t) => {
+            if (t.type === "browser" || t.type === "file" || t.type === "memo") {
+              return false;
+            }
+            return findAllPanes(t.root).some((p) => p.id === paneId);
+          });
+          const isOnActiveTab =
+            !!owningTab && owningTab.id === s.activeTabId;
           const next: PaneStatus = {
             busy: prev?.busy ?? false,
             command: prev?.command ?? null,
             awaitingInput: prev?.awaitingInput ?? false,
             completedAt: prev?.completedAt ?? null,
-            // 새 알림 → 깜빡임 다시 트리거.
-            acknowledged: false,
+            // 활성 탭이면 즉시 acknowledged=true (이미 보고 있으니 알릴 필요 없음).
+            // 비활성 탭이면 acknowledged=false 로 리셋 → dot/ring 깜빡임.
+            acknowledged: isOnActiveTab,
             lastNotification: { title, body, at },
           };
           return {

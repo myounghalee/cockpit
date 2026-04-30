@@ -48,65 +48,100 @@ export interface DigestResult {
   dailyDates: string[];
 }
 
-async function detectGitEmail(): Promise<string | null> {
+async function gitConfigGlobal(key: string): Promise<string | null> {
   try {
-    const { stdout } = await execFileP(
-      "git",
-      ["config", "--global", "user.email"],
-      { timeout: 2000 },
-    );
+    const { stdout } = await execFileP("git", ["config", "--global", key], {
+      timeout: 2000,
+    });
     return stdout.trim() || null;
   } catch {
     return null;
   }
 }
 
-async function detectGitEmailIn(cwd: string): Promise<string | null> {
-  // 프로젝트 로컬 설정이 있으면 그것 우선 (사용자가 repo 별로 다른 identity 쓰는 경우 대응)
+async function gitConfigLocal(cwd: string, key: string): Promise<string | null> {
   try {
-    const { stdout } = await execFileP(
-      "git",
-      ["-C", cwd, "config", "user.email"],
-      { timeout: 2000 },
-    );
+    const { stdout } = await execFileP("git", ["-C", cwd, "config", key], {
+      timeout: 2000,
+    });
     return stdout.trim() || null;
   } catch {
     return null;
   }
+}
+
+async function detectGitEmail(): Promise<string | null> {
+  return gitConfigGlobal("user.email");
+}
+
+async function detectGitEmailIn(cwd: string): Promise<string | null> {
+  // 프로젝트 로컬 설정이 있으면 그것 우선 (사용자가 repo 별로 다른 identity 쓰는 경우 대응)
+  return gitConfigLocal(cwd, "user.email");
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * --author 필터에 쓸 author 패턴 생성.
+ *
+ * 단일 이메일 기반 필터의 한계:
+ *   - GitHub UI에서 PR을 squash/merge하면 author 이메일이 사용자 GitHub
+ *     noreply 이메일(예: 1234+id@users.noreply.github.com)로 바뀌어 로컬
+ *     `user.email` 매칭에서 누락됨.
+ *
+ * 해결: author **name** 까지 OR 로 묶음. 같은 사람이 여러 이메일을 쓰더라도
+ * `git config user.name` 값이 commit author 헤더에 포함돼 있으면 매칭됨.
+ */
+function buildAuthorPattern(values: Array<string | null | undefined>): string | null {
+  const uniq = Array.from(
+    new Set(values.filter((v): v is string => typeof v === "string" && v.length > 0)),
+  );
+  if (uniq.length === 0) return null;
+  return uniq.map(escapeRegex).join("\\|");
 }
 
 async function gitLogFor(
   cwd: string,
   since: string,
-  author: string | null,
+  authorPattern: string | null,
 ): Promise<GitCommit[]> {
+  // --all: 현재 HEAD뿐 아니라 모든 ref 검사 → squash-merge 등으로 다른 브랜치에
+  // 들어간 사용자 commit도 포함.
   const args = [
     "-C",
     cwd,
     "log",
+    "--all",
     `--since=${since}`,
     "--pretty=format:%H%x09%aI%x09%ae%x09%s",
   ];
-  if (author) args.push(`--author=${author}`);
+  if (authorPattern) args.push(`--author=${authorPattern}`);
   try {
     const { stdout } = await execFileP("git", args, {
       timeout: 8000,
       maxBuffer: 10 * 1024 * 1024,
     });
     if (!stdout.trim()) return [];
-    return stdout
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => {
-        const parts = line.split("\t");
-        const [hash, date, author, ...subj] = parts;
-        return {
-          hash: hash ?? "",
-          date: date ?? "",
-          author: author ?? "",
-          subject: subj.join("\t"),
-        };
+    // --all 사용 시 같은 commit이 여러 ref에서 보일 수는 없으나 (hash 유일),
+    // 만약을 위해 hash 기준 dedupe.
+    const seen = new Set<string>();
+    const out: GitCommit[] = [];
+    for (const line of stdout.split("\n")) {
+      if (!line) continue;
+      const parts = line.split("\t");
+      const [hash, date, author, ...subj] = parts;
+      if (!hash || seen.has(hash)) continue;
+      seen.add(hash);
+      out.push({
+        hash,
+        date: date ?? "",
+        author: author ?? "",
+        subject: subj.join("\t"),
       });
+    }
+    return out;
   } catch {
     return [];
   }
@@ -117,23 +152,33 @@ export async function buildDigest(days: number): Promise<DigestResult> {
   const from = new Date(to.getTime() - days * 86400_000);
   const since = from.toISOString();
 
-  const globalEmail = await detectGitEmail();
+  const [globalEmail, globalName] = await Promise.all([
+    detectGitEmail(),
+    gitConfigGlobal("user.name"),
+  ]);
 
   const projects = await prisma.project.findMany({
     select: { id: true, name: true, path: true },
     orderBy: { name: "asc" },
   });
 
-  // 병렬로 git log 실행. 각 repo 의 로컬 user.email 우선, 없으면 글로벌.
-  // 사용자가 repo 별로 다른 identity(개인 이메일 vs 회사 이메일) 쓰는 경우를 커버.
+  // 병렬로 git log 실행. 각 repo 의 로컬 user.email/name 우선, 없으면 글로벌.
+  // email + name 을 OR 로 매칭해 GitHub squash merge 가 author 이메일을
+  // noreply.github.com 으로 바꾼 commit 도 잡는다.
   const commitsByProject = (
     await Promise.all(
       projects.map(async (p) => {
         const gitDir = path.join(p.path, ".git");
         if (!fs.existsSync(gitDir)) return null;
-        const localEmail = await detectGitEmailIn(p.path);
-        const author = localEmail ?? globalEmail;
-        const commits = await gitLogFor(p.path, since, author);
+        const [localEmail, localName] = await Promise.all([
+          detectGitEmailIn(p.path),
+          gitConfigLocal(p.path, "user.name"),
+        ]);
+        const pattern = buildAuthorPattern([
+          localEmail ?? globalEmail,
+          localName ?? globalName,
+        ]);
+        const commits = await gitLogFor(p.path, since, pattern);
         if (commits.length === 0) return null;
         return {
           projectId: p.id,

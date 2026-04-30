@@ -40,9 +40,15 @@ interface NewTabMenuProps {
   onOpenChange?: (open: boolean) => void;
   /** split 모드일 땐 터미널 탭만 노출 */
   splitOnly?: boolean;
+  /**
+   * 터미널 모드에서 검색이 비어 있을 때 최상단에 보여줄 기본 항목.
+   * - 새 탭 컨텍스트(상단 + 버튼) → "홈" (cwd=null → ~)
+   * - 패인 분할 컨텍스트 → "현재 패널" (caller 가 cwd 전달)
+   */
+  defaultLabel?: string; // 기본 "홈"
 
   /** 핸들러들 — caller 가 mode 별로 호출됨 */
-  onOpenTerminal: (cwd: string | null) => void; // null=홈
+  onOpenTerminal: (cwd: string | null) => void; // null=defaultLabel 항목 선택
   onOpenBrowser: (url: string) => void;
   onOpenFile: (filePath: string) => void;
   onOpenMemo: (memo: { id: string; title: string }) => void;
@@ -79,6 +85,7 @@ export function NewTabMenu({
   open: controlledOpen,
   onOpenChange,
   splitOnly = false,
+  defaultLabel = "홈",
   onOpenTerminal,
   onOpenBrowser,
   onOpenFile,
@@ -328,18 +335,11 @@ export function NewTabMenu({
             {/* === 터미널 모드 === */}
             {mode === "terminal" && (
               <>
-                {/* 검색이 비어 있을 때만 "홈" 노출 */}
+                {/* 검색이 비어 있을 때만 기본 항목(홈 또는 caller 지정 라벨) 노출 — 프로젝트 항목과 동일한 1줄 사이즈 */}
                 {!trimmed && (
                   <>
-                    <PickerItem
-                      icon={
-                        <Home
-                          size={13}
-                          className="text-[var(--color-accent)]"
-                        />
-                      }
-                      label="홈"
-                      description="~"
+                    <DefaultRow
+                      label={defaultLabel}
                       onSelect={() => finishTerminal(null)}
                       onKeyDown={handleItemKeyDown}
                     />
@@ -514,6 +514,38 @@ export function NewTabMenu({
         </DropdownPrimitive.Content>
       </DropdownPrimitive.Portal>
     </DropdownPrimitive.Root>
+  );
+}
+
+/**
+ * 터미널 모드의 기본 항목 ("홈" 또는 "현재 패널") — ProjectBranch 와 동일한 컴팩트 1줄 사이즈.
+ * 프로젝트 항목의 chevron 자리에는 invisible spacer 를 두어 정렬 맞춤.
+ */
+function DefaultRow({
+  label,
+  onSelect,
+  onKeyDown,
+}: {
+  label: string;
+  onSelect: () => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <div className="group flex items-center gap-1 px-1 py-1 hover:bg-[var(--color-surface-hover)]">
+      {/* chevron spacer — 프로젝트 행의 펼치기 버튼 자리 (p-1 + size 12 = 20px) */}
+      <span className="p-1 inline-flex">
+        <span className="w-3 h-3" />
+      </span>
+      <button
+        data-picker-item
+        onClick={onSelect}
+        onKeyDown={onKeyDown}
+        className="flex-1 flex items-center gap-2 min-w-0 text-left py-0.5 focus:bg-[var(--color-surface-hover)] focus:outline-none rounded"
+      >
+        <Home size={12} className="text-[var(--color-accent)] flex-shrink-0" />
+        <span className="truncate text-sm">{label}</span>
+      </button>
+    </div>
   );
 }
 

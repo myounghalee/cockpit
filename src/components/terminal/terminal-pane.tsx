@@ -135,6 +135,11 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
       scrollback: 5000,
       allowProposedApi: true,
       macOptionIsMeta: true,
+      // 24bit truecolor escape (\033[38;2;R;G;Bm) 가 라이트 테마 흰 배경에서
+      // 흰색(rgb 255,255,255) 으로 그대로 박혀 안 보이는 문제를 막는다.
+      // p10k / eza / bat 등이 다크 터미널 가정으로 거의 흰 색 텍스트를 emit할 때 발생.
+      // 4.5:1 = WCAG AA (보통 텍스트). xterm 이 셀별로 fg/bg 대비를 자동 보정.
+      minimumContrastRatio: 4.5,
     });
 
     // 테마 동적 추적 — `<html data-theme>` 속성 변경 + OS prefers-color-scheme 변경에 반응.
@@ -355,12 +360,14 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
         >
           <SplitMenuButton
             paneId={pane.id}
+            paneCwd={pane.cwd}
             direction="horizontal"
             title="좌우 분할 (터미널 / 파일 / 메모 / URL)"
             icon={<SplitSquareHorizontal size={12} />}
           />
           <SplitMenuButton
             paneId={pane.id}
+            paneCwd={pane.cwd}
             direction="vertical"
             title="상하 분할 (터미널 / 파일 / 메모 / URL)"
             icon={<SplitSquareVertical size={12} />}
@@ -392,11 +399,13 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
  */
 function SplitMenuButton({
   paneId,
+  paneCwd,
   direction,
   title,
   icon,
 }: {
   paneId: string;
+  paneCwd: string;
   direction: SplitDirection;
   title: string;
   icon: React.ReactNode;
@@ -405,9 +414,10 @@ function SplitMenuButton({
 
   return (
     <NewTabMenu
+      defaultLabel="현재 패널"
       onOpenTerminal={(cwd) => {
-        // cwd=null → "홈" — pane 분할에서도 ~ 로 명시 전달 (현재 pane cwd 폴백 안 함)
-        const targetCwd = cwd ?? "~";
+        // cwd=null → 기본 항목 ("현재 패널") 선택 — 현재 pane 의 cwd 그대로 사용
+        const targetCwd = cwd ?? paneCwd;
         void splitPane(paneId, direction, { cwd: targetCwd });
       }}
       onOpenBrowser={(url) => {

@@ -10,14 +10,10 @@ import {
   SplitSquareHorizontal,
   SplitSquareVertical,
   X,
-  Globe,
-  FileText,
-  StickyNote,
 } from "lucide-react";
 import { useTerminalStore } from "@/store/terminal-store";
-import type { TerminalPane as TerminalPaneType } from "@/types/terminal";
-import { ProjectPathPicker } from "@/components/projects/project-path-picker";
-import { MemoPicker } from "./memo-picker";
+import type { TerminalPane as TerminalPaneType, SplitDirection } from "@/types/terminal";
+import { NewTabMenu } from "./new-tab-menu";
 import { usePaneDnd } from "./use-pane-dnd";
 import { cn } from "@/lib/utils";
 
@@ -106,7 +102,6 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
   const fitRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<PtyWsClient | null>(null);
 
-  const splitPane = useTerminalStore((s) => s.splitPane);
   const closePane = useTerminalStore((s) => s.closePane);
   const fontSize = useTerminalStore((s) => s.terminalFontSize);
   const terminalTheme = useTerminalStore((s) => s.terminalTheme);
@@ -358,83 +353,17 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
-          <ProjectPathPicker
-            onSelect={(cwd) =>
-              splitPane(pane.id, "horizontal", cwd ? { cwd } : undefined)
-            }
-            defaultLabel="기본 (현재 패널 cwd)"
-            defaultDescription={pane.cwd}
-            align="end"
-            side="bottom"
-            trigger={
-              <button
-                className="p-1 rounded hover:bg-[var(--color-surface-hover)]"
-                title="오른쪽으로 분할 (클릭으로 프로젝트 선택)"
-                aria-label="오른쪽으로 분할"
-              >
-                <SplitSquareHorizontal size={12} />
-              </button>
-            }
+          <SplitMenuButton
+            paneId={pane.id}
+            direction="horizontal"
+            title="좌우 분할 (터미널 / 파일 / 메모 / URL)"
+            icon={<SplitSquareHorizontal size={12} />}
           />
-          <ProjectPathPicker
-            onSelect={(cwd) =>
-              splitPane(pane.id, "vertical", cwd ? { cwd } : undefined)
-            }
-            defaultLabel="기본 (현재 패널 cwd)"
-            defaultDescription={pane.cwd}
-            align="end"
-            side="bottom"
-            trigger={
-              <button
-                className="p-1 rounded hover:bg-[var(--color-surface-hover)]"
-                title="아래로 분할 (클릭으로 프로젝트 선택)"
-                aria-label="아래로 분할"
-              >
-                <SplitSquareVertical size={12} />
-              </button>
-            }
-          />
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              splitPane(pane.id, "horizontal", { type: "browser" });
-            }}
-            className="p-1 rounded hover:bg-[var(--color-surface-hover)]"
-            title="오른쪽에 브라우저 분할"
-            aria-label="오른쪽에 브라우저 분할"
-          >
-            <Globe size={12} />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              splitPane(pane.id, "horizontal", { type: "file" });
-            }}
-            className="p-1 rounded hover:bg-[var(--color-surface-hover)]"
-            title="오른쪽에 파일 뷰어 분할"
-            aria-label="오른쪽에 파일 뷰어 분할"
-          >
-            <FileText size={12} />
-          </button>
-          <MemoPicker
-            onSelect={(memo) =>
-              splitPane(pane.id, "horizontal", {
-                type: "memo",
-                memoId: memo.id,
-                title: memo.title || "메모",
-              })
-            }
-            trigger={
-              <button
-                className="p-1 rounded hover:bg-[var(--color-surface-hover)]"
-                title="오른쪽에 메모 뷰어 분할"
-                aria-label="오른쪽에 메모 뷰어 분할"
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <StickyNote size={12} />
-              </button>
-            }
+          <SplitMenuButton
+            paneId={pane.id}
+            direction="vertical"
+            title="상하 분할 (터미널 / 파일 / 메모 / URL)"
+            icon={<SplitSquareVertical size={12} />}
           />
 
           <button
@@ -454,5 +383,57 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
       {/* xterm 컨테이너 */}
       <div ref={containerRef} className="flex-1 min-h-0 overflow-hidden" />
     </div>
+  );
+}
+
+/**
+ * 패인 헤더의 분할 버튼 — 통합 메뉴(NewTabMenu)를 띄워 터미널/파일/메모/URL 중 선택해 분할.
+ * 상단 + 버튼과 동일한 picker 를 공유한다.
+ */
+function SplitMenuButton({
+  paneId,
+  direction,
+  title,
+  icon,
+}: {
+  paneId: string;
+  direction: SplitDirection;
+  title: string;
+  icon: React.ReactNode;
+}) {
+  const splitPane = useTerminalStore((s) => s.splitPane);
+
+  return (
+    <NewTabMenu
+      onOpenTerminal={(cwd) => {
+        // cwd=null → "홈" — pane 분할에서도 ~ 로 명시 전달 (현재 pane cwd 폴백 안 함)
+        const targetCwd = cwd ?? "~";
+        void splitPane(paneId, direction, { cwd: targetCwd });
+      }}
+      onOpenBrowser={(url) => {
+        void splitPane(paneId, direction, { type: "browser", url });
+      }}
+      onOpenFile={(filePath) => {
+        void splitPane(paneId, direction, { type: "file", filePath });
+      }}
+      onOpenMemo={(memo) => {
+        void splitPane(paneId, direction, {
+          type: "memo",
+          memoId: memo.id,
+          title: memo.title,
+        });
+      }}
+      trigger={
+        <button
+          className="p-1 rounded hover:bg-[var(--color-surface-hover)]"
+          title={title}
+          aria-label={title}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {icon}
+        </button>
+      }
+    />
   );
 }

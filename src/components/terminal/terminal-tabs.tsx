@@ -2,9 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useTerminalStore, flattenPanes } from "@/store/terminal-store";
-import { useActiveProjectStore } from "@/store/active-project-store";
 import { useNewTabPickerStore } from "@/store/new-tab-picker-store";
-import { useProjects } from "@/hooks/use-projects";
 import {
   Plus,
   X,
@@ -15,8 +13,7 @@ import {
   StickyNote,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ProjectPathPicker } from "@/components/projects/project-path-picker";
-import { MemoPicker } from "./memo-picker";
+import { NewTabMenu } from "./new-tab-menu";
 
 const IS_MAC =
   typeof navigator !== "undefined" &&
@@ -41,25 +38,32 @@ export function TerminalTabs() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
-  const activeId = useActiveProjectStore((s) => s.activeProjectId);
-  const { data: projectsData } = useProjects();
-  const activeProject = projectsData?.projects.find((p) => p.id === activeId);
-
   // ⌘T / ⌘⇧T / + 버튼이 공유하는 picker open 상태
   const pickerOpen = useNewTabPickerStore((s) => s.open);
   const setPickerOpen = useNewTabPickerStore((s) => s.setOpen);
   const pickerMode = useNewTabPickerStore((s) => s.mode);
   const splitRightmost = useTerminalStore((s) => s.splitRightmostInActiveTab);
 
-  const handlePickerSelect = (cwd: string | null) => {
+  // 터미널 선택 — cwd=null 이면 "홈" (~ 으로 서버에서 확장)
+  const handleOpenTerminal = (cwd: string | null) => {
+    const targetCwd = cwd ?? "~";
     if (pickerMode === "split") {
-      // ⌘⇧T — 활성 탭의 오른쪽에 split. cwd 미지정 시 store 내부에서 활성 프로젝트 path 사용.
-      void splitRightmost(cwd ?? undefined);
+      void splitRightmost(targetCwd);
       return;
     }
-    // ⌘T / + 버튼 — 새 탭
-    if (cwd) void createTab({ cwd });
-    else void createTab();
+    void createTab({ cwd: targetCwd });
+  };
+  const handleOpenBrowser = (url: string) => {
+    if (pickerMode === "split") return; // split 모드에선 터미널만
+    createBrowserTab(url);
+  };
+  const handleOpenFile = (filePath: string) => {
+    if (pickerMode === "split") return;
+    createFileTab(filePath || undefined);
+  };
+  const handleOpenMemo = (memo: { id: string; title: string }) => {
+    if (pickerMode === "split") return;
+    createMemoTab(memo.id, memo.title);
   };
 
   // 탭의 "주목 알림" 상태 — 다음 중 하나가 true && acknowledged=false 면 깜빡임:
@@ -236,53 +240,21 @@ export function TerminalTabs() {
         </div>
         );
       })}
-      <ProjectPathPicker
+      <NewTabMenu
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        onSelect={handlePickerSelect}
-        defaultLabel="기본 (활성 프로젝트)"
-        defaultDescription={
-          activeProject
-            ? `${activeProject.name} — ${activeProject.path}`
-            : undefined
-        }
-        align="start"
-        side="bottom"
+        splitOnly={pickerMode === "split"}
+        onOpenTerminal={handleOpenTerminal}
+        onOpenBrowser={handleOpenBrowser}
+        onOpenFile={handleOpenFile}
+        onOpenMemo={handleOpenMemo}
         trigger={
           <button
             className="flex items-center justify-center w-8 h-full text-[var(--color-foreground-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-hover)]"
-            title={`새 터미널 (${TAB_MOD}T — 프로젝트 선택)`}
-            aria-label="새 터미널"
+            title={`새 탭 (${TAB_MOD}T — 터미널 / 파일 / 메모)`}
+            aria-label="새 탭"
           >
             <Plus size={16} />
-          </button>
-        }
-      />
-      <button
-        onClick={() => createBrowserTab()}
-        className="flex items-center justify-center w-8 h-full text-[var(--color-foreground-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-hover)]"
-        title="새 브라우저 탭"
-        aria-label="새 브라우저 탭"
-      >
-        <Globe size={14} />
-      </button>
-      <button
-        onClick={() => createFileTab()}
-        className="flex items-center justify-center w-8 h-full text-[var(--color-foreground-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-hover)]"
-        title="새 파일 뷰어 탭"
-        aria-label="새 파일 뷰어 탭"
-      >
-        <FileText size={14} />
-      </button>
-      <MemoPicker
-        onSelect={(memo) => createMemoTab(memo.id, memo.title || "메모")}
-        trigger={
-          <button
-            className="flex items-center justify-center w-8 h-full text-[var(--color-foreground-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-hover)]"
-            title="메모 열기 (검색)"
-            aria-label="메모 탭 열기"
-          >
-            <StickyNote size={14} />
           </button>
         }
       />

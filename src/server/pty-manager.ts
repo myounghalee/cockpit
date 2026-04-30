@@ -142,7 +142,10 @@ function cleanEnvForPty(
 
 function resolveCwd(requested?: string): string {
   const home = os.homedir();
-  const candidate = requested ?? process.env.DEFAULT_CWD ?? home;
+  let candidate = requested ?? process.env.DEFAULT_CWD ?? home;
+  // ~ / ~/... 확장 (셸은 path.resolve 한 뒤엔 더이상 ~를 처리하지 않으므로 여기서 처리)
+  if (candidate === "~") candidate = home;
+  else if (candidate.startsWith("~/")) candidate = path.join(home, candidate.slice(2));
   try {
     const resolved = path.resolve(candidate);
     const stat = fs.statSync(resolved);

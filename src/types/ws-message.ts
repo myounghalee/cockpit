@@ -28,4 +28,9 @@ export type ServerMessage =
       busy: boolean;
       command: string | null;
       awaitingInput: boolean;
-    };
+    }
+  /**
+   * PTY 출력에서 발견한 OSC 9 / 99 / 777 알림.
+   * Claude Code 등 에이전트가 attention 시그널로 emit 시 사용.
+   */
+  | { type: "notification"; title: string; body: string };

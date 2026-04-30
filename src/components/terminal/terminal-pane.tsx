@@ -62,6 +62,13 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
   const closePane = useTerminalStore((s) => s.closePane);
   const fontSize = useTerminalStore((s) => s.terminalFontSize);
   const setPaneStatus = useTerminalStore((s) => s.setPaneStatus);
+  const recordPaneNotification = useTerminalStore(
+    (s) => s.recordPaneNotification,
+  );
+  // OSC 알림으로 인한 attention 상태 — 파란 ring 토글용.
+  const paneStatus = useTerminalStore((s) => s.paneStatuses[pane.id]);
+  const showNotificationRing =
+    !!paneStatus?.lastNotification && !paneStatus.acknowledged;
   const dnd = usePaneDnd(pane.id);
 
   // 생성 시점에만 초기값을 쓰도록 ref로 분리 — 변경은 별도 effect에서 동적으로 반영
@@ -122,6 +129,9 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
       } else if (msg.type === "status") {
         // 서버가 1초 주기로 자식 프로세스 감지 → 이 pane 의 실행 상태
         setPaneStatus(pane.id, msg.busy, msg.command, msg.awaitingInput);
+      } else if (msg.type === "notification") {
+        // OSC 9/99/777 — Claude Code 등 에이전트 attention 시그널.
+        recordPaneNotification(pane.id, msg.title, msg.body);
       }
     });
     ws.connect();
@@ -248,7 +258,18 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
       className={cn(
         "relative flex flex-col h-full min-h-0 bg-[var(--color-background)] border border-transparent group",
         dnd.isDragOver && "border-[var(--color-accent)]",
+        // OSC 알림 ring — 에이전트 attention. 사용자가 활성화/포커스 시
+        // setActiveTab → acknowledged=true 로 자동 해제.
+        showNotificationRing &&
+          "ring-2 ring-[var(--color-accent)] ring-inset",
       )}
+      title={
+        showNotificationRing && paneStatus?.lastNotification
+          ? [paneStatus.lastNotification.title, paneStatus.lastNotification.body]
+              .filter(Boolean)
+              .join(" — ")
+          : undefined
+      }
       onMouseDown={onFocus}
       onClick={onFocus}
       {...dnd.rootProps}

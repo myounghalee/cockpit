@@ -17,7 +17,8 @@ type ServerMessage =
       busy: boolean;
       command: string | null;
       awaitingInput: boolean;
-    };
+    }
+  | { type: "notification"; title: string; body: string };
 
 function send(ws: WebSocket, message: ServerMessage): void {
   if (ws.readyState === ws.OPEN) {

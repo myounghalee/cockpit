@@ -16,6 +16,12 @@ import { useActiveProjectStore } from "./active-project-store";
  * - 앱 마운트 시 syncWithServer()로 서버 pty 목록과 대조하여 stale한 pane/탭을 정리.
  */
 
+export interface PaneNotification {
+  title: string;
+  body: string;
+  at: number; // ms timestamp
+}
+
 export interface PaneStatus {
   busy: boolean;
   command: string | null;
@@ -32,10 +38,15 @@ export interface PaneStatus {
   /**
    * 사용자가 "이 탭을 봤음" 플래그. true 면 깜빡임 중지.
    * - setActiveTab 시 true 로 세팅 (dismiss)
-   * - 새로운 상태 전환(새 작업 시작, 새 응답 대기)이 감지되면 다시 false 로 리셋
+   * - 새로운 상태 전환(새 작업 시작, 새 응답 대기, 새 OSC 알림)이 감지되면 다시 false 로 리셋
    *   → 다음 알림은 다시 깜빡여서 주의 환기
    */
   acknowledged: boolean;
+  /**
+   * 최근 수신한 OSC 9/99/777 알림 (cmux 식 attention ring 트리거).
+   * 새 알림이 오면 acknowledged=false 로 리셋되어 깜빡임 발동.
+   */
+  lastNotification: PaneNotification | null;
 }
 
 interface TerminalState {
@@ -49,6 +60,12 @@ interface TerminalState {
     busy: boolean,
     command: string | null,
     awaitingInput: boolean,
+  ) => void;
+  /** PTY 가 OSC 알림을 보냈을 때 — pane 의 lastNotification 갱신 + 깜빡임 트리거. */
+  recordPaneNotification: (
+    paneId: string,
+    title: string,
+    body: string,
   ) => void;
   /** 파일 뷰어에서 성공적으로 열었던 최근 경로들 (최신 먼저, 최대 10개) */
   recentFiles: string[];
@@ -535,8 +552,30 @@ export const useTerminalStore = create<TerminalState>()(
                 awaitingInput,
                 completedAt,
                 acknowledged,
+                lastNotification: prev?.lastNotification ?? null,
               },
             },
+          };
+        });
+      },
+
+      recordPaneNotification: (paneId, title, body) => {
+        // 빈 알림은 무시 (방어적 — 서버 단에서 이미 필터되지만 한번 더).
+        if (!title && !body) return;
+        set((s) => {
+          const prev = s.paneStatuses[paneId];
+          const at = Date.now();
+          const next: PaneStatus = {
+            busy: prev?.busy ?? false,
+            command: prev?.command ?? null,
+            awaitingInput: prev?.awaitingInput ?? false,
+            completedAt: prev?.completedAt ?? null,
+            // 새 알림 → 깜빡임 다시 트리거.
+            acknowledged: false,
+            lastNotification: { title, body, at },
+          };
+          return {
+            paneStatuses: { ...s.paneStatuses, [paneId]: next },
           };
         });
       },

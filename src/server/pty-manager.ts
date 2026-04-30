@@ -34,6 +34,8 @@ export interface PtyRecord {
   /** onData 배칭 버퍼 — 짧은 시간 내 연속 출력은 한 메시지로 합쳐 구독자에게 전송 */
   pendingOutput?: string;
   pendingFlushTimer?: NodeJS.Timeout;
+  /** OSC notification 파서가 청크 경계를 넘는 미완 시퀀스를 보관 */
+  oscFragment?: string;
 }
 
 /** onData 배칭 윈도 — 이 시간 안에 들어온 연속 출력은 1개 메시지로 합쳐 보냄. */
@@ -164,6 +166,105 @@ function getIdleTimeoutMs(): number {
   if (!Number.isFinite(n) || n < 0) return 30 * 60 * 1000;
   if (n === 0) return 0; // 0 = 비활성
   return Math.min(n, 24 * 60 * 60 * 1000); // max 24h
+}
+
+/** OSC notification — 발견 시 발생시킨 알림 1건. */
+export interface OscNotification {
+  title: string;
+  body: string;
+}
+
+/** 알림 본문/제목의 최대 길이 (UI 표시용 + 메모리 보호). */
+const OSC_FIELD_MAX_LEN = 1024;
+/** 미완 OSC fragment 상한 — ESC ] 로 시작했지만 BEL/ST 가 안 온 상태에서 보관할 최대 길이. */
+const OSC_FRAGMENT_MAX_LEN = 8192;
+
+/**
+ * 청크에서 OSC 9 / 99 / 777 알림 시퀀스를 추출.
+ * 출력 스트림은 변형하지 않음 (xterm.js 가 알 수 없는 OSC 는 무시함).
+ *
+ * 지원 형식 (terminator: BEL `\x07` 또는 ST `\x1b\\`):
+ *   - `ESC ] 9 ; <body> BEL`              (iTerm style — title 없음)
+ *   - `ESC ] 99 ; <meta> ; <body> BEL`    (Ghostty/ConEmu — meta 는 `k=v:k=v`)
+ *   - `ESC ] 777 ; notify ; <title> ; <body> BEL`  (urxvt/KDE)
+ *
+ * 청크 경계로 잘린 미완 시퀀스는 `record.oscFragment` 에 보관해 다음 청크와 합쳐 재시도.
+ */
+export function extractOscNotifications(
+  record: { oscFragment?: string },
+  chunk: string,
+): OscNotification[] {
+  const buf = (record.oscFragment ?? "") + chunk;
+  record.oscFragment = undefined;
+
+  const results: OscNotification[] = [];
+
+  // 빠른 경로: ESC ] 가 아예 없으면 즉시 종료.
+  if (buf.indexOf("\x1b]") === -1) return results;
+
+  // 완성된 OSC 9/99/777 만 매칭. payload 안에는 BEL/ESC 가 없는 것으로 가정 (RFC 부합).
+  const pattern = /\x1b\](9|99|777);([^\x07\x1b]*?)(\x07|\x1b\\)/g;
+  let lastMatchEnd = 0;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(buf)) !== null) {
+    const noti = parseOscPayload(m[1], m[2]);
+    if (noti) results.push(clampNotification(noti));
+    lastMatchEnd = pattern.lastIndex;
+  }
+
+  // 마지막 매치 이후의 영역에 미완 OSC 가 있는지 확인.
+  // (`ESC ]` 시작했으나 terminator 없음 → 다음 청크와 합치도록 보관.)
+  const tailEsc = buf.indexOf("\x1b]", lastMatchEnd);
+  if (tailEsc !== -1) {
+    const tail = buf.slice(tailEsc);
+    // terminator 가 이미 들어있다면 이건 매칭 안 된 다른 OSC (e.g. OSC 0 = title) 이므로 무시.
+    if (!/\x07|\x1b\\/.test(tail) && tail.length <= OSC_FRAGMENT_MAX_LEN) {
+      record.oscFragment = tail;
+    }
+  }
+
+  return results;
+}
+
+function parseOscPayload(code: string, payload: string): OscNotification | null {
+  if (code === "9") {
+    const body = payload.trim();
+    if (!body) return null;
+    return { title: "", body };
+  }
+  if (code === "777") {
+    // `notify ; <title> ; <body...>` — body 안에 ;가 있으면 합쳐서 보존.
+    const parts = payload.split(";");
+    if (parts[0] !== "notify" || parts.length < 2) return null;
+    const title = parts[1] ?? "";
+    const body = parts.slice(2).join(";");
+    if (!title && !body) return null;
+    return { title, body };
+  }
+  if (code === "99") {
+    // `<meta>;<body>` — meta 는 `k=v:k=v`. body 가 비면 meta.t 만 있는 경우 가능.
+    const sep = payload.indexOf(";");
+    const meta = sep === -1 ? payload : payload.slice(0, sep);
+    const body = sep === -1 ? "" : payload.slice(sep + 1);
+    let title = "";
+    for (const pair of meta.split(":")) {
+      const eq = pair.indexOf("=");
+      if (eq === -1) continue;
+      const k = pair.slice(0, eq);
+      const v = pair.slice(eq + 1);
+      if (k === "t" || k === "title") title = decodeURIComponent(v);
+    }
+    if (!title && !body) return null;
+    return { title, body };
+  }
+  return null;
+}
+
+function clampNotification(n: OscNotification): OscNotification {
+  return {
+    title: n.title.slice(0, OSC_FIELD_MAX_LEN),
+    body: n.body.slice(0, OSC_FIELD_MAX_LEN),
+  };
 }
 
 /**
@@ -340,6 +441,17 @@ export class PtyManager {
     pty.onData((data) => {
       record.buffer.write(data);
       record.lastOutputAt = Date.now();
+
+      // OSC notification 추출 — 출력 스트림은 그대로 두고 알림만 별도 broadcast.
+      const notifications = extractOscNotifications(record, data);
+      if (notifications.length > 0) {
+        for (const n of notifications) {
+          for (const ws of record.subscribers) {
+            send(ws, { type: "notification", title: n.title, body: n.body });
+          }
+        }
+      }
+
       // 배칭: 연속 출력은 OUTPUT_FLUSH_MS 윈도 안에서 한 메시지로 합침.
       // UTF-8 경계는 node-pty 가 StringDecoder 로 이미 보장(string 전달)하므로
       // 여기서는 단순 문자열 concat 안전.

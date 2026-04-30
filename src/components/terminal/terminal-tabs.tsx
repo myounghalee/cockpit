@@ -65,26 +65,39 @@ export function TerminalTabs() {
   // 탭의 "주목 알림" 상태 — 다음 중 하나가 true && acknowledged=false 면 깜빡임:
   //   (a) 방금 busy→idle 전환 (completedAt 존재 && !busy)   "명령 완료"
   //   (b) awaitingInput 상태 (busy && 서버가 입력 대기 감지) "Claude 응답 대기"
+  //   (c) 최근 OSC 9/99/777 알림 수신 (lastNotification 있음)  "에이전트 알림"
   // acknowledged=true 면 깜빡임 중지 (탭 클릭 시 자동 true).
   // 같은 awaitingInput 상태가 계속 와도 재트리거 안 함 (justStartedAwaiting 에서만 리셋).
   const tabRunState = (tab: (typeof tabs)[number]) => {
     if (tab.type === "browser" || tab.type === "file" || tab.type === "memo") {
-      return { attention: false, command: null as string | null };
+      return {
+        attention: false,
+        command: null as string | null,
+        notificationText: null as string | null,
+      };
     }
     const panes = flattenPanes(tab.root);
     for (const p of panes) {
       const st = paneStatuses[p.id];
       if (!st || st.acknowledged) continue;
+      // (c) OSC 알림 — 가장 명확한 신호 (에이전트가 명시적으로 emit)
+      if (st.lastNotification) {
+        const text =
+          [st.lastNotification.title, st.lastNotification.body]
+            .filter(Boolean)
+            .join(" — ") || null;
+        return { attention: true, command: st.command, notificationText: text };
+      }
       // (b) 응답 대기
       if (st.busy && st.awaitingInput) {
-        return { attention: true, command: st.command };
+        return { attention: true, command: st.command, notificationText: null };
       }
       // (a) 방금 완료
       if (!st.busy && st.completedAt !== null) {
-        return { attention: true, command: st.command };
+        return { attention: true, command: st.command, notificationText: null };
       }
     }
-    return { attention: false, command: null };
+    return { attention: false, command: null, notificationText: null };
   };
 
   return (
@@ -149,13 +162,21 @@ export function TerminalTabs() {
           ) : tab.type === "memo" ? (
             <StickyNote size={12} className="flex-shrink-0 opacity-70" />
           ) : runState.attention ? (
-            // 방금 완료 — 탭을 보면 acknowledged=true 로 바뀌어 깜빡임 중지
+            // 알림/완료 — 탭을 보면 acknowledged=true 로 바뀌어 깜빡임 중지.
+            // OSC 알림이면 accent(파랑), 그 외(완료/대기)는 success(초록).
             <span
-              className="w-1.5 h-1.5 rounded-full flex-shrink-0 mx-[3px] animate-cockpit-blink bg-[var(--color-success)]"
+              className={cn(
+                "w-1.5 h-1.5 rounded-full flex-shrink-0 mx-[3px] animate-cockpit-blink",
+                runState.notificationText
+                  ? "bg-[var(--color-accent)]"
+                  : "bg-[var(--color-success)]",
+              )}
               title={
-                runState.command
-                  ? `완료: ${runState.command}`
-                  : "작업 완료"
+                runState.notificationText
+                  ? `알림: ${runState.notificationText}`
+                  : runState.command
+                    ? `완료: ${runState.command}`
+                    : "작업 완료"
               }
             />
           ) : (

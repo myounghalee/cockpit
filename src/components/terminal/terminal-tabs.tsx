@@ -44,13 +44,26 @@ export function TerminalTabs() {
   const pickerMode = useNewTabPickerStore((s) => s.mode);
   const splitRightmost = useTerminalStore((s) => s.splitRightmostInActiveTab);
 
-  // 터미널 선택 — cwd=null 이면 "홈" (~ 으로 서버에서 확장)
+  // split 모드 (⌘⇧T) 의 기본 항목으로 사용할 "현재 탭의 우측 분할 cwd".
+  // 활성 탭의 가장 오른쪽 leaf pane 의 cwd 를 그대로 이어받음.
+  // 패인 헤더 분할 버튼이 "현재 패널" 을 사용하는 것과 동일한 UX.
+  const activeTabRightmostCwd = (() => {
+    const active = tabs.find((t) => t.id === activeTabId);
+    if (!active || active.type !== undefined && active.type !== "terminal") return null;
+    const panes = flattenPanes(active.root);
+    if (panes.length === 0) return null;
+    const last = panes[panes.length - 1];
+    return last.cwd || null;
+  })();
+
+  // 터미널 선택 — cwd=null 이면 split 모드는 "현재 탭의 우측 pane" cwd, 그 외는 "홈"(~)
   const handleOpenTerminal = (cwd: string | null) => {
-    const targetCwd = cwd ?? "~";
     if (pickerMode === "split") {
+      const targetCwd = cwd ?? activeTabRightmostCwd ?? "~";
       void splitRightmost(targetCwd);
       return;
     }
+    const targetCwd = cwd ?? "~";
     void createTab({ cwd: targetCwd });
   };
   const handleOpenBrowser = (url: string) => {
@@ -244,6 +257,7 @@ export function TerminalTabs() {
         open={pickerOpen}
         onOpenChange={setPickerOpen}
         splitOnly={pickerMode === "split"}
+        defaultLabel={pickerMode === "split" ? "현재 탭 우측 분할" : "홈"}
         onOpenTerminal={handleOpenTerminal}
         onOpenBrowser={handleOpenBrowser}
         onOpenFile={handleOpenFile}
@@ -251,7 +265,7 @@ export function TerminalTabs() {
         trigger={
           <button
             className="flex items-center justify-center w-8 h-full text-[var(--color-foreground-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-hover)]"
-            title={`새 탭 (${TAB_MOD}T — 터미널 / 파일 / 메모)`}
+            title={`새 탭 (${TAB_MOD}T — 터미널 / 파일 / 메모) · ${TAB_MOD}⇧T 로 활성 탭 분할`}
             aria-label="새 탭"
           >
             <Plus size={16} />

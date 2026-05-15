@@ -212,3 +212,89 @@ export async function transitionIssueIfConfigured(
   if (!creds) return;
   await transitionIssue(issueKey, target);
 }
+
+/* ───────────────────────────────────────────────────────────────────
+ * Digest 통합 — 기간 내 완료된 이슈 + 현재 진행중 이슈.
+ *   - 완료: statusCategory=Done AND status changed to Done after -<days>d
+ *     (resolutiondate 가 있으면 그걸 우선, 없는 워크플로우 대비 changelog 기반)
+ *   - 진행중: statusCategory != Done AND statusCategory != "To Do"
+ *     (즉 "In Progress" 카테고리 — 기간 무관, 현재 시점 기준)
+ * ─────────────────────────────────────────────────────────────────── */
+
+export interface JiraDigestIssue extends JiraIssueLite {
+  updated: string; // ISO
+}
+
+export interface JiraDigest {
+  available: boolean;
+  reason?: string;
+  done: JiraDigestIssue[];
+  inProgress: JiraDigestIssue[];
+  fetchedAt: string;
+}
+
+interface JiraSearchRow {
+  key: string;
+  fields: {
+    summary?: string;
+    status?: { name?: string };
+    issuetype?: { name?: string };
+    description?: unknown;
+    updated?: string;
+  };
+}
+
+function rowToDigest(row: JiraSearchRow): JiraDigestIssue {
+  return {
+    key: row.key,
+    summary: row.fields.summary ?? "",
+    status: row.fields.status?.name ?? "",
+    type: (row.fields.issuetype?.name ?? "feature").toLowerCase(),
+    description: renderAdfToPlainText(row.fields.description),
+    updated: row.fields.updated ?? "",
+  };
+}
+
+async function searchJqlForDigest(jql: string): Promise<JiraDigestIssue[]> {
+  const data = (await jiraFetch(`/rest/api/3/search/jql`, {
+    method: "POST",
+    body: JSON.stringify({
+      jql,
+      maxResults: 50,
+      fields: ["summary", "status", "issuetype", "description", "updated"],
+    }),
+  })) as { issues: JiraSearchRow[] };
+  return (data.issues ?? []).map(rowToDigest);
+}
+
+export async function buildJiraDigest(days: number): Promise<JiraDigest> {
+  const fetchedAt = new Date().toISOString();
+  const empty = (reason: string): JiraDigest => ({
+    available: false,
+    reason,
+    done: [],
+    inProgress: [],
+    fetchedAt,
+  });
+
+  const creds = await getJiraCredentials();
+  if (!creds) return empty("자격증명 미설정");
+
+  // 완료: status changed → done-계열 after -<days>d. 워크플로우가 다양해서
+  // statusCategory=Done 으로 fallback (resolution 미설정 워크플로우 대비).
+  const doneJql = `assignee = currentUser() AND statusCategory = Done AND status changed to ("Done","Closed","Resolved","Complete","완료","종료") after -${days}d ORDER BY updated DESC`;
+  // 진행중: statusCategory != Done 으로 넓게. "In Progress" 카테고리는 워크
+  // 플로우에 따라 비어있을 수 있어 (모든 티켓이 To Do→Done 으로 직행하는
+  // 팀이 흔함) 미해결 전체를 "진행 중 또는 대기" 로 묶어 보여줌.
+  const inProgressJql = `assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC`;
+
+  try {
+    const [done, inProgress] = await Promise.all([
+      searchJqlForDigest(doneJql),
+      searchJqlForDigest(inProgressJql),
+    ]);
+    return { available: true, done, inProgress, fetchedAt };
+  } catch (err) {
+    return empty(`Jira 조회 실패: ${(err as Error).message}`);
+  }
+}

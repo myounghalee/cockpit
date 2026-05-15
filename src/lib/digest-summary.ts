@@ -51,7 +51,7 @@ function rangeLabel(days: number): string {
   return `최근 ${days}일`;
 }
 
-export const DEFAULT_PROMPT_TEMPLATE = `당신은 개발자의 회고를 돕는 리서처입니다. 아래 데이터(커밋/Claude Code 세션/daily 로그/Slack 메시지)를 바탕으로 사용자가 한 일을 한국어 마크다운으로 정리하세요.
+export const DEFAULT_PROMPT_TEMPLATE = `당신은 개발자의 회고를 돕는 리서처입니다. 아래 데이터(커밋/Claude Code 세션/daily 로그/Slack 메시지/Jira 티켓)를 바탕으로 사용자가 한 일을 한국어 마크다운으로 정리하세요.
 
 ## 출력 규칙 (엄격히)
 
@@ -60,13 +60,14 @@ export const DEFAULT_PROMPT_TEMPLATE = `당신은 개발자의 회고를 돕는 
 - 도구 이름(Edit/Write/MCP/Bash 등)은 언급하지 마세요.
 - 프로젝트별 진행은 **커밋 또는 Claude 세션이 있는 프로젝트만** 다룹니다. 모두 나열하지 말고 활동량이 많은 프로젝트 우선.
 - Slack 데이터는 본인이 보낸 메시지만 들어 있습니다 — 상대 답변 없이도 흐름이 파악되도록 채널/DM 단위로 주제만 압축하세요. 잡담·이모지·인사 같은 신호는 무시.
+- Jira 티켓은 "이 기간에 완료" 와 "현재 미해결(진행 중·대기 포함)" 두 그룹입니다. 미해결은 기간 무관 현재 상태 — 다음 포커스 작성에 활용.
 - 각 섹션이 데이터 부족으로 의미 없으면 생략 가능. 단 "하이라이트" 와 "지표" 는 항상 출력.
 - 말투: 담백한 평서형. 보고서 톤.
 
 ## 출력 형식
 
 ### 하이라이트
-- (이 기간에 가장 의미 있는 성과/결정/변화를 3~5개 불릿. 각 1~2문장. 코드/문서 진행과 협업 논의를 골고루 반영)
+- (이 기간에 가장 의미 있는 성과/결정/변화를 3~5개 불릿. 각 1~2문장. 코드/문서 진행과 협업 논의·티켓 완료를 골고루 반영)
 
 ### 프로젝트별 진행
 
@@ -74,6 +75,11 @@ export const DEFAULT_PROMPT_TEMPLATE = `당신은 개발자의 회고를 돕는 
 - (어떤 기능/버그/문서/설계를 다뤘는지 2~4문장. 커밋 제목과 daily 로그를 근거로 작성)
 
 (활동이 있는 프로젝트만 반복. 활동량 많은 순)
+
+### 완료한 Jira 티켓
+- {KEY} {요약} — (한 줄로 무엇을 끝냈는지)
+
+(완료 티켓이 있을 때만. 없으면 섹션 생략)
 
 ### 협업·소통 (Slack)
 
@@ -87,9 +93,11 @@ export const DEFAULT_PROMPT_TEMPLATE = `당신은 개발자의 회고를 돕는 
 - Claude Code 세션 {N}회 · {M}개 프로젝트
 - Daily 기록 {N}일
 - Slack 메시지 {N}건 · {M}개 채널/DM (Slack 데이터 없으면 이 줄 생략)
+- Jira 완료 {N}건 · 미해결 {M}건 (Jira 데이터 없으면 이 줄 생략)
 
 ### 다음 포커스
-- (미완료/진행 중으로 보이는 작업이 있으면 1~3개 불릿. 없거나 불분명하면 이 섹션 생략)
+- (현재 미해결 Jira 티켓 + 미완료로 보이는 작업을 묶어 1~5개 불릿.
+   티켓은 "{KEY} {요약}" 형태로 명시. 너무 많으면 최근 updated 우선. 없으면 이 섹션 생략)
 `;
 
 function ensureDir(dir: string): void {
@@ -225,6 +233,33 @@ function buildContext(digest: DigestResult): string {
     if (digest.dailyDates.length > 10) {
       parts.push(`\n(외 ${digest.dailyDates.length - 10}일 더 있음 — 생략)`);
     }
+  }
+  parts.push("");
+
+  // Jira — 완료(in range) + 진행중(현재)
+  const jira = digest.jira;
+  parts.push(
+    `## Jira 티켓 (완료 ${jira.done.length}건, 미해결 ${jira.inProgress.length}건${
+      jira.available ? "" : " — unavailable"
+    })`,
+  );
+  if (!jira.available) {
+    parts.push(`(Jira 자격증명 미설정 또는 조회 실패: ${jira.reason ?? "unknown"})`);
+  } else {
+    const TRUNC = 200;
+    const fmt = (i: { key: string; summary: string; status: string; description?: string; updated: string }) => {
+      const desc = (i.description || "").replace(/\s+/g, " ").trim();
+      const descPart = desc ? ` — ${desc.length > TRUNC ? desc.slice(0, TRUNC - 1) + "…" : desc}` : "";
+      const updated = i.updated ? ` (updated ${i.updated.slice(0, 10)})` : "";
+      return `- ${i.key} [${i.status}] ${i.summary}${updated}${descPart}`;
+    };
+    parts.push(`\n### 완료한 티켓 (${jira.done.length})`);
+    if (jira.done.length === 0) parts.push("(없음)");
+    else for (const i of jira.done.slice(0, 30)) parts.push(fmt(i));
+
+    parts.push(`\n### 현재 미해결 티켓 (${jira.inProgress.length})`);
+    if (jira.inProgress.length === 0) parts.push("(없음)");
+    else for (const i of jira.inProgress.slice(0, 30)) parts.push(fmt(i));
   }
   parts.push("");
 

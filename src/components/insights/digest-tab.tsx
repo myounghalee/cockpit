@@ -24,6 +24,7 @@ import {
   User,
   Bot,
   Hash,
+  Ticket,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizeMarkdown } from "@/lib/markdown-normalize";
@@ -70,6 +71,22 @@ interface SlackDigest {
   fetchedAt: string;
 }
 
+interface JiraDigestIssue {
+  key: string;
+  summary: string;
+  status: string;
+  type: string;
+  description: string;
+  updated: string;
+}
+interface JiraDigest {
+  available: boolean;
+  reason?: string;
+  done: JiraDigestIssue[];
+  inProgress: JiraDigestIssue[];
+  fetchedAt: string;
+}
+
 interface DigestResponse {
   rangeDays: number;
   from: string;
@@ -81,6 +98,7 @@ interface DigestResponse {
   sessionsByProject: Array<{ projectName: string; count: number }>;
   dailyDates: string[];
   slack: SlackDigest;
+  jira: JiraDigest;
 }
 
 function formatDate(iso: string): string {
@@ -319,7 +337,7 @@ export function DigestTab() {
 
         {/* 요약 카드 */}
         {data && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <SummaryCard
               Icon={GitCommit}
               label="커밋"
@@ -346,6 +364,16 @@ export function DigestTab() {
                 data.slack.available
                   ? `${data.slack.channels.length}개 채널/DM`
                   : "토큰 미설정"
+              }
+            />
+            <SummaryCard
+              Icon={Ticket}
+              label="Jira 완료"
+              value={data.jira.available ? data.jira.done.length : 0}
+              sub={
+                data.jira.available
+                  ? `미해결 ${data.jira.inProgress.length}건`
+                  : "자격증명 미설정"
               }
             />
           </div>
@@ -600,6 +628,24 @@ export function DigestTab() {
           </section>
         )}
 
+        {/* Jira — 완료/진행중 */}
+        {data && data.jira.available &&
+          (data.jira.done.length > 0 || data.jira.inProgress.length > 0) && (
+            <JiraSection jira={data.jira} />
+          )}
+        {data && !data.jira.available && (
+          <section className="rounded-md border border-[var(--color-border)] p-3 text-xs text-[var(--color-foreground-dim)]">
+            <Ticket size={12} className="inline mr-1" />
+            Jira 티켓 — {data.jira.reason ?? "사용 불가"}{" "}
+            <Link
+              href="/settings"
+              className="underline hover:text-[var(--color-accent)]"
+            >
+              설정에서 자격증명 추가
+            </Link>
+          </section>
+        )}
+
         {/* Slack — 채널/DM별 메시지 수 (펼치면 본문) */}
         {data && data.slack.available && data.slack.channels.length > 0 && (
           <SlackSection slack={data.slack} />
@@ -791,6 +837,51 @@ function PromptEditorModal({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function JiraSection({ jira }: { jira: JiraDigest }) {
+  const groups: Array<{ id: string; label: string; issues: JiraDigestIssue[] }> = [
+    { id: "done", label: "완료", issues: jira.done },
+    { id: "inProgress", label: "미해결 (진행 중·대기)", issues: jira.inProgress },
+  ].filter((g) => g.issues.length > 0);
+  return (
+    <section className="rounded-md border border-[var(--color-border)]">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-foreground-dim)]">
+        <Ticket size={12} />
+        Jira 티켓
+      </div>
+      <ul className="divide-y divide-[var(--color-border)]">
+        {groups.map((g) => (
+          <li key={g.id}>
+            <div className="px-3 py-1.5 text-[11px] text-[var(--color-foreground-dim)] bg-[var(--color-surface)]/50">
+              {g.label} · {g.issues.length}건
+            </div>
+            <ul>
+              {g.issues.map((i) => (
+                <li
+                  key={i.key}
+                  className="px-3 py-1.5 flex items-center gap-2 text-xs hover:bg-[var(--color-surface-hover)]"
+                >
+                  <span className="font-mono text-[var(--color-accent)] flex-shrink-0">
+                    {i.key}
+                  </span>
+                  <span className="flex-1 truncate">{i.summary}</span>
+                  <span className="font-mono text-[10px] text-[var(--color-foreground-dim)] flex-shrink-0">
+                    {i.status}
+                  </span>
+                  {i.updated && (
+                    <span className="font-mono text-[10px] text-[var(--color-foreground-dim)] flex-shrink-0">
+                      {i.updated.slice(0, 10)}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

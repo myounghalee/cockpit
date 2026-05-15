@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { listSessions } from "@/lib/claude-data";
 import { listDailyDates } from "@/lib/daily-log";
 import { buildSlackDigest, type SlackDigest } from "@/lib/slack";
+import { buildJiraDigest, type JiraDigest } from "@/lib/jira";
 
 const execFileP = promisify(execFile);
 
@@ -49,6 +50,8 @@ export interface DigestResult {
   dailyDates: string[];
   /** Slack 활동 요약. 토큰 미설정/실패 시 available=false. */
   slack: SlackDigest;
+  /** Jira 활동 요약 (완료 in range + 현재 진행중). 자격증명 미설정 시 available=false. */
+  jira: JiraDigest;
 }
 
 async function gitConfigGlobal(key: string): Promise<string | null> {
@@ -220,22 +223,30 @@ export async function buildDigest(days: number): Promise<DigestResult> {
   const fromDateStr = from.toISOString().slice(0, 10);
   const dailyDates = listDailyDates(days + 5).filter((d) => d >= fromDateStr);
 
-  // Slack — 토큰 없거나 실패해도 digest 자체는 살아있도록 catch
-  let slack: SlackDigest;
-  try {
-    slack = await buildSlackDigest(days);
-  } catch (err) {
-    slack = {
-      available: false,
-      reason: (err as Error).message,
-      myUserId: null,
-      myDisplayName: null,
-      team: null,
-      totalMessages: 0,
-      channels: [],
-      fetchedAt: new Date().toISOString(),
-    };
-  }
+  // Slack & Jira — 외부 의존이라 한쪽 실패가 디지스트 전체를 망치지 않게 catch
+  const [slack, jira] = await Promise.all([
+    buildSlackDigest(days).catch(
+      (err): SlackDigest => ({
+        available: false,
+        reason: (err as Error).message,
+        myUserId: null,
+        myDisplayName: null,
+        team: null,
+        totalMessages: 0,
+        channels: [],
+        fetchedAt: new Date().toISOString(),
+      }),
+    ),
+    buildJiraDigest(days).catch(
+      (err): JiraDigest => ({
+        available: false,
+        reason: (err as Error).message,
+        done: [],
+        inProgress: [],
+        fetchedAt: new Date().toISOString(),
+      }),
+    ),
+  ]);
 
   return {
     rangeDays: days,
@@ -248,5 +259,6 @@ export async function buildDigest(days: number): Promise<DigestResult> {
     sessionsByProject,
     dailyDates,
     slack,
+    jira,
   };
 }

@@ -23,6 +23,7 @@ import {
   Send,
   User,
   Bot,
+  Hash,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizeMarkdown } from "@/lib/markdown-normalize";
@@ -46,6 +47,29 @@ interface ProjectCommits {
   projectPath: string;
   commits: GitCommitEntry[];
 }
+interface SlackDigestMessage {
+  isoAt: string;
+  text: string;
+  permalink?: string;
+}
+interface SlackDigestChannel {
+  id: string;
+  label: string;
+  kind: "public" | "private" | "dm" | "group_dm" | "unknown";
+  partnerIsBot: boolean;
+  messages: SlackDigestMessage[];
+}
+interface SlackDigest {
+  available: boolean;
+  reason?: string;
+  myUserId: string | null;
+  myDisplayName: string | null;
+  team: string | null;
+  totalMessages: number;
+  channels: SlackDigestChannel[];
+  fetchedAt: string;
+}
+
 interface DigestResponse {
   rangeDays: number;
   from: string;
@@ -56,6 +80,7 @@ interface DigestResponse {
   sessionCount: number;
   sessionsByProject: Array<{ projectName: string; count: number }>;
   dailyDates: string[];
+  slack: SlackDigest;
 }
 
 function formatDate(iso: string): string {
@@ -294,7 +319,7 @@ export function DigestTab() {
 
         {/* 요약 카드 */}
         {data && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <SummaryCard
               Icon={GitCommit}
               label="커밋"
@@ -312,6 +337,16 @@ export function DigestTab() {
               label="Daily 기록"
               value={data.dailyDates.length}
               sub="일자"
+            />
+            <SummaryCard
+              Icon={Hash}
+              label="Slack 메시지"
+              value={data.slack.available ? data.slack.totalMessages : 0}
+              sub={
+                data.slack.available
+                  ? `${data.slack.channels.length}개 채널/DM`
+                  : "토큰 미설정"
+              }
             />
           </div>
         )}
@@ -565,6 +600,23 @@ export function DigestTab() {
           </section>
         )}
 
+        {/* Slack — 채널/DM별 메시지 수 (펼치면 본문) */}
+        {data && data.slack.available && data.slack.channels.length > 0 && (
+          <SlackSection slack={data.slack} />
+        )}
+        {data && !data.slack.available && (
+          <section className="rounded-md border border-[var(--color-border)] p-3 text-xs text-[var(--color-foreground-dim)]">
+            <Hash size={12} className="inline mr-1" />
+            Slack 활동 — {data.slack.reason ?? "사용 불가"}{" "}
+            <Link
+              href="/settings"
+              className="underline hover:text-[var(--color-accent)]"
+            >
+              설정에서 user token 추가
+            </Link>
+          </section>
+        )}
+
         {/* Daily dates */}
         {data && data.dailyDates.length > 0 && (
           <section className="rounded-md border border-[var(--color-border)]">
@@ -739,6 +791,91 @@ function PromptEditorModal({ onClose }: { onClose: () => void }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function SlackSection({ slack }: { slack: SlackDigest }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  return (
+    <section className="rounded-md border border-[var(--color-border)]">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-border)] text-xs text-[var(--color-foreground-dim)]">
+        <Hash size={12} />
+        Slack — 채널/DM별 본인 메시지
+        {slack.myDisplayName && (
+          <span className="text-[10px] font-mono">
+            · {slack.myDisplayName}
+            {slack.team ? ` @ ${slack.team}` : ""}
+          </span>
+        )}
+      </div>
+      <ul className="divide-y divide-[var(--color-border)]">
+        {slack.channels.map((c) => {
+          const open = expanded.has(c.id);
+          return (
+            <li key={c.id}>
+              <button
+                onClick={() => toggle(c.id)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-[var(--color-surface-hover)]"
+              >
+                {open ? (
+                  <ChevronDown size={14} className="flex-shrink-0" />
+                ) : (
+                  <ChevronRight size={14} className="flex-shrink-0" />
+                )}
+                <Hash
+                  size={12}
+                  className="text-[var(--color-accent)] flex-shrink-0"
+                />
+                <span className="font-medium truncate">{c.label}</span>
+                <span className="text-[11px] text-[var(--color-foreground-dim)] flex-shrink-0">
+                  {c.messages.length}건
+                </span>
+              </button>
+              {open && (
+                <ul className="pb-2 pl-9 pr-3 text-xs space-y-0.5">
+                  {c.messages.slice(0, 50).map((m, idx) => (
+                    <li
+                      key={`${c.id}-${idx}`}
+                      className="flex gap-2"
+                    >
+                      <span className="font-mono text-[var(--color-foreground-dim)] flex-shrink-0">
+                        {m.isoAt.slice(5, 16).replace("T", " ")}
+                      </span>
+                      <span className="min-w-0 break-words">
+                        {m.permalink ? (
+                          <a
+                            href={m.permalink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hover:underline"
+                          >
+                            {m.text}
+                          </a>
+                        ) : (
+                          m.text
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                  {c.messages.length > 50 && (
+                    <li className="text-[var(--color-foreground-dim)]">
+                      … (외 {c.messages.length - 50}건)
+                    </li>
+                  )}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

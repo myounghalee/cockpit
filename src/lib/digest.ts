@@ -14,6 +14,7 @@ import * as path from "path";
 import { prisma } from "@/lib/prisma";
 import { listSessions } from "@/lib/claude-data";
 import { listDailyDates } from "@/lib/daily-log";
+import { buildSlackDigest, type SlackDigest } from "@/lib/slack";
 
 const execFileP = promisify(execFile);
 
@@ -46,6 +47,8 @@ export interface DigestResult {
   sessionCount: number;
   sessionsByProject: DigestSessionProject[];
   dailyDates: string[];
+  /** Slack 활동 요약. 토큰 미설정/실패 시 available=false. */
+  slack: SlackDigest;
 }
 
 async function gitConfigGlobal(key: string): Promise<string | null> {
@@ -217,6 +220,23 @@ export async function buildDigest(days: number): Promise<DigestResult> {
   const fromDateStr = from.toISOString().slice(0, 10);
   const dailyDates = listDailyDates(days + 5).filter((d) => d >= fromDateStr);
 
+  // Slack — 토큰 없거나 실패해도 digest 자체는 살아있도록 catch
+  let slack: SlackDigest;
+  try {
+    slack = await buildSlackDigest(days);
+  } catch (err) {
+    slack = {
+      available: false,
+      reason: (err as Error).message,
+      myUserId: null,
+      myDisplayName: null,
+      team: null,
+      totalMessages: 0,
+      channels: [],
+      fetchedAt: new Date().toISOString(),
+    };
+  }
+
   return {
     rangeDays: days,
     from: from.toISOString(),
@@ -227,5 +247,6 @@ export async function buildDigest(days: number): Promise<DigestResult> {
     sessionCount: sessionsInRange.length,
     sessionsByProject,
     dailyDates,
+    slack,
   };
 }

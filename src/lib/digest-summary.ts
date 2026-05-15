@@ -51,7 +51,7 @@ function rangeLabel(days: number): string {
   return `최근 ${days}일`;
 }
 
-export const DEFAULT_PROMPT_TEMPLATE = `당신은 개발자의 회고를 돕는 리서처입니다. 아래 데이터(커밋/Claude Code 세션/daily 로그)를 바탕으로 사용자가 한 일을 한국어 마크다운으로 정리하세요.
+export const DEFAULT_PROMPT_TEMPLATE = `당신은 개발자의 회고를 돕는 리서처입니다. 아래 데이터(커밋/Claude Code 세션/daily 로그/Slack 메시지)를 바탕으로 사용자가 한 일을 한국어 마크다운으로 정리하세요.
 
 ## 출력 규칙 (엄격히)
 
@@ -59,13 +59,14 @@ export const DEFAULT_PROMPT_TEMPLATE = `당신은 개발자의 회고를 돕는 
 - 데이터에 없는 프로젝트/작업을 추측해서 만들지 마세요.
 - 도구 이름(Edit/Write/MCP/Bash 등)은 언급하지 마세요.
 - 프로젝트별 진행은 **커밋 또는 Claude 세션이 있는 프로젝트만** 다룹니다. 모두 나열하지 말고 활동량이 많은 프로젝트 우선.
+- Slack 데이터는 본인이 보낸 메시지만 들어 있습니다 — 상대 답변 없이도 흐름이 파악되도록 채널/DM 단위로 주제만 압축하세요. 잡담·이모지·인사 같은 신호는 무시.
 - 각 섹션이 데이터 부족으로 의미 없으면 생략 가능. 단 "하이라이트" 와 "지표" 는 항상 출력.
 - 말투: 담백한 평서형. 보고서 톤.
 
 ## 출력 형식
 
 ### 하이라이트
-- (이 기간에 가장 의미 있는 성과/결정/변화를 3~5개 불릿. 각 1~2문장)
+- (이 기간에 가장 의미 있는 성과/결정/변화를 3~5개 불릿. 각 1~2문장. 코드/문서 진행과 협업 논의를 골고루 반영)
 
 ### 프로젝트별 진행
 
@@ -74,10 +75,18 @@ export const DEFAULT_PROMPT_TEMPLATE = `당신은 개발자의 회고를 돕는 
 
 (활동이 있는 프로젝트만 반복. 활동량 많은 순)
 
+### 협업·소통 (Slack)
+
+**{채널명 또는 DM 상대}**
+- (이 채널/DM 에서 다룬 업무 주제를 1~2문장. 잡담은 제외)
+
+(업무성 채널/DM 만, 활동량 많은 순. Slack 데이터가 비어있으면 이 섹션 통째로 생략)
+
 ### 지표
 - 커밋 {N}건 · {M}개 프로젝트
 - Claude Code 세션 {N}회 · {M}개 프로젝트
 - Daily 기록 {N}일
+- Slack 메시지 {N}건 · {M}개 채널/DM (Slack 데이터 없으면 이 줄 생략)
 
 ### 다음 포커스
 - (미완료/진행 중으로 보이는 작업이 있으면 1~3개 불릿. 없거나 불분명하면 이 섹션 생략)
@@ -215,6 +224,43 @@ function buildContext(digest: DigestResult): string {
     }
     if (digest.dailyDates.length > 10) {
       parts.push(`\n(외 ${digest.dailyDates.length - 10}일 더 있음 — 생략)`);
+    }
+  }
+  parts.push("");
+
+  // Slack — 본인이 보낸 메시지만, 채널/DM별
+  const slack = digest.slack;
+  parts.push(
+    `## Slack 본인 메시지 (총 ${slack.totalMessages}건, ${slack.channels.length}개 채널/DM${
+      slack.available ? "" : " — unavailable"
+    })`,
+  );
+  if (!slack.available) {
+    parts.push(`(Slack 토큰 미설정 또는 조회 실패: ${slack.reason ?? "unknown"})`);
+  } else if (slack.totalMessages === 0) {
+    parts.push("(없음)");
+  } else {
+    // 채널 cap — 너무 많으면 컨텍스트 폭발. 상위 12개 채널/DM, 채널당 30메시지.
+    const MAX_CHANNELS = 12;
+    const MAX_MSGS_PER_CHANNEL = 30;
+    const shown = slack.channels.slice(0, MAX_CHANNELS);
+    for (const ch of shown) {
+      parts.push(`\n### ${ch.label} (${ch.messages.length}건)`);
+      const msgs = ch.messages.slice(0, MAX_MSGS_PER_CHANNEL);
+      for (const m of msgs) {
+        const t = m.text.replace(/\s+/g, " ").trim();
+        if (!t) continue;
+        const truncated = t.length > 200 ? t.slice(0, 197) + "…" : t;
+        parts.push(`- [${m.isoAt.slice(0, 16).replace("T", " ")}] ${truncated}`);
+      }
+      if (ch.messages.length > MAX_MSGS_PER_CHANNEL) {
+        parts.push(`  … (외 ${ch.messages.length - MAX_MSGS_PER_CHANNEL}건 생략)`);
+      }
+    }
+    if (slack.channels.length > MAX_CHANNELS) {
+      parts.push(
+        `\n(외 ${slack.channels.length - MAX_CHANNELS}개 채널/DM 생략)`,
+      );
     }
   }
 

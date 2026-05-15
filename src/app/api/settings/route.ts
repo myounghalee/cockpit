@@ -7,6 +7,7 @@ const SETTING_KEYS = [
   "jira.apiToken",
   "jira.autoTransitionDone",
   "terminal.shellPath",
+  "slack.userToken",
 ];
 
 async function loadSettings() {
@@ -24,6 +25,9 @@ async function loadSettings() {
     terminal: {
       shellPath: map.get("terminal.shellPath") ?? "",
     },
+    slack: {
+      hasUserToken: !!map.get("slack.userToken"),
+    },
   };
 }
 
@@ -40,6 +44,9 @@ interface PutBody {
   };
   terminal?: {
     shellPath?: string; // 빈 문자열이면 제거 (자동 감지)
+  };
+  slack?: {
+    userToken?: string | null; // null/빈 문자열이면 제거
   };
 }
 
@@ -92,6 +99,17 @@ export async function PUT(request: Request) {
       const v = body.terminal.shellPath.trim();
       if (v) await upsert("terminal.shellPath", v);
       else await remove("terminal.shellPath");
+    }
+  }
+
+  if (body.slack) {
+    if (body.slack.userToken !== undefined) {
+      const v = body.slack.userToken;
+      if (v === null || v === "" || (typeof v === "string" && !v.trim())) {
+        await remove("slack.userToken");
+      } else {
+        await upsert("slack.userToken", v.trim());
+      }
     }
   }
 

@@ -4,6 +4,7 @@ import { EditorSettings } from "@/components/settings/editor-settings";
 import { NotificationsSettings } from "@/components/settings/notifications-settings";
 import { TerminalSettings } from "@/components/settings/terminal-settings";
 import { JiraSettings } from "@/components/settings/jira-settings";
+import { SlackSettings } from "@/components/settings/slack-settings";
 
 export default function SettingsPage() {
   return (
@@ -16,6 +17,7 @@ export default function SettingsPage() {
         <NotificationsSettings />
         <TerminalSettings />
         <JiraSettings />
+        <SlackSettings />
       </div>
     </div>
   );

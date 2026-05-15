@@ -14,6 +14,9 @@ export interface SettingsResponse {
   terminal: {
     shellPath: string;
   };
+  slack: {
+    hasUserToken: boolean;
+  };
 }
 
 const KEY = ["settings"] as const;
@@ -53,6 +56,9 @@ export function useUpdateSettings() {
       terminal?: {
         shellPath?: string;
       };
+      slack?: {
+        userToken?: string | null;
+      };
     }) =>
       api<SettingsResponse>("/api/settings", {
         method: "PUT",
@@ -71,6 +77,20 @@ export function useTestJira() {
       return (await res.json()) as {
         ok: boolean;
         user?: string;
+        error?: string;
+      };
+    },
+  });
+}
+
+export function useTestSlack() {
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/slack/test");
+      return (await res.json()) as {
+        ok: boolean;
+        user?: string;
+        team?: string;
         error?: string;
       };
     },

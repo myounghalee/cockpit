@@ -59,7 +59,7 @@ export const DEFAULT_PROMPT_TEMPLATE = `당신은 개발자의 회고를 돕는 
 - 데이터에 없는 프로젝트/작업을 추측해서 만들지 마세요.
 - 도구 이름(Edit/Write/MCP/Bash 등)은 언급하지 마세요.
 - 프로젝트별 진행은 **커밋 또는 Claude 세션이 있는 프로젝트만** 다룹니다. 모두 나열하지 말고 활동량이 많은 프로젝트 우선.
-- Slack 데이터는 본인이 보낸 메시지만 들어 있습니다 — 상대 답변 없이도 흐름이 파악되도록 채널/DM 단위로 주제만 압축하세요. 잡담·이모지·인사 같은 신호는 무시.
+- Slack 데이터: 본인 메시지가 5건 이상인 채널/DM 은 상대 발화까지 포함된 "양방향" 대화입니다. 그 외는 "본인만" — 답변 없이 본인 발화만 보고 주제 추론. 양방향이면 합의된 결론·결정 사항·blocker 까지 적극 반영하세요. 잡담·이모지·인사·짧은 ㅇㅋ ㄱㄱ 같은 신호는 무시.
 - Jira 티켓은 "이 기간에 완료" 와 "현재 미해결(진행 중·대기 포함)" 두 그룹입니다. 미해결은 기간 무관 현재 상태 — 다음 포커스 작성에 활용.
 - 각 섹션이 데이터 부족으로 의미 없으면 생략 가능. 단 "하이라이트" 와 "지표" 는 항상 출력.
 - 말투: 담백한 평서형. 보고서 톤.
@@ -263,10 +263,10 @@ function buildContext(digest: DigestResult): string {
   }
   parts.push("");
 
-  // Slack — 본인이 보낸 메시지만, 채널/DM별
+  // Slack — 채널/DM별. 본인 메시지가 5건 이상인 채널은 상대 발화도 함께 (양방향).
   const slack = digest.slack;
   parts.push(
-    `## Slack 본인 메시지 (총 ${slack.totalMessages}건, ${slack.channels.length}개 채널/DM${
+    `## Slack 활동 (총 ${slack.totalMessages}건, ${slack.channels.length}개 채널/DM${
       slack.available ? "" : " — unavailable"
     })`,
   );
@@ -275,18 +275,21 @@ function buildContext(digest: DigestResult): string {
   } else if (slack.totalMessages === 0) {
     parts.push("(없음)");
   } else {
-    // 채널 cap — 너무 많으면 컨텍스트 폭발. 상위 12개 채널/DM, 채널당 30메시지.
+    // 채널 cap — 너무 많으면 컨텍스트 폭발. 상위 12개 채널/DM, 채널당 40메시지.
     const MAX_CHANNELS = 12;
-    const MAX_MSGS_PER_CHANNEL = 30;
+    const MAX_MSGS_PER_CHANNEL = 40;
     const shown = slack.channels.slice(0, MAX_CHANNELS);
     for (const ch of shown) {
-      parts.push(`\n### ${ch.label} (${ch.messages.length}건)`);
+      const ctxNote = ch.hasFullContext ? "양방향" : "본인만";
+      parts.push(`\n### ${ch.label} (${ch.messages.length}건, ${ctxNote})`);
       const msgs = ch.messages.slice(0, MAX_MSGS_PER_CHANNEL);
       for (const m of msgs) {
         const t = m.text.replace(/\s+/g, " ").trim();
         if (!t) continue;
         const truncated = t.length > 200 ? t.slice(0, 197) + "…" : t;
-        parts.push(`- [${m.isoAt.slice(0, 16).replace("T", " ")}] ${truncated}`);
+        parts.push(
+          `- [${m.isoAt.slice(0, 16).replace("T", " ")}] ${m.author}: ${truncated}`,
+        );
       }
       if (ch.messages.length > MAX_MSGS_PER_CHANNEL) {
         parts.push(`  … (외 ${ch.messages.length - MAX_MSGS_PER_CHANNEL}건 생략)`);

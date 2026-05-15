@@ -50,6 +50,8 @@ interface ProjectCommits {
 }
 interface SlackDigestMessage {
   isoAt: string;
+  author: string;
+  isMe: boolean;
   text: string;
   permalink?: string;
 }
@@ -58,6 +60,7 @@ interface SlackDigestChannel {
   label: string;
   kind: "public" | "private" | "dm" | "group_dm" | "unknown";
   partnerIsBot: boolean;
+  hasFullContext: boolean;
   messages: SlackDigestMessage[];
 }
 interface SlackDigest {
@@ -928,6 +931,21 @@ function SlackSection({ slack }: { slack: SlackDigest }) {
                 <span className="text-[11px] text-[var(--color-foreground-dim)] flex-shrink-0">
                   {c.messages.length}건
                 </span>
+                <span
+                  className={cn(
+                    "text-[10px] px-1.5 py-0.5 rounded-sm font-mono flex-shrink-0",
+                    c.hasFullContext
+                      ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                      : "bg-[var(--color-surface)] text-[var(--color-foreground-dim)]",
+                  )}
+                  title={
+                    c.hasFullContext
+                      ? "본인 메시지 5건 이상 → 상대 발화까지 포함"
+                      : "본인 메시지만 (5건 미만)"
+                  }
+                >
+                  {c.hasFullContext ? "양방향" : "본인만"}
+                </span>
               </button>
               {open && (
                 <ul className="pb-2 pl-9 pr-3 text-xs space-y-0.5">
@@ -938,6 +956,16 @@ function SlackSection({ slack }: { slack: SlackDigest }) {
                     >
                       <span className="font-mono text-[var(--color-foreground-dim)] flex-shrink-0">
                         {m.isoAt.slice(5, 16).replace("T", " ")}
+                      </span>
+                      <span
+                        className={cn(
+                          "font-medium flex-shrink-0",
+                          m.isMe
+                            ? "text-[var(--color-accent)]"
+                            : "text-[var(--color-foreground-muted)]",
+                        )}
+                      >
+                        {m.author}:
                       </span>
                       <span className="min-w-0 break-words">
                         {m.permalink ? (

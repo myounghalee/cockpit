@@ -86,7 +86,12 @@ interface SlackUserLite {
 
 export interface SlackDigestMessage {
   isoAt: string;
+  /** 작성자 표시 이름. "나" / 상대방 / 봇 이름 */
+  author: string;
+  /** 본인이 보낸 메시지 여부 */
+  isMe: boolean;
   text: string;
+  /** search.messages 결과로 들어온 메시지에만 있음. history-only 메시지는 없음. */
   permalink?: string;
 }
 
@@ -95,6 +100,8 @@ export interface SlackDigestChannel {
   label: string;
   kind: "public" | "private" | "dm" | "group_dm" | "unknown";
   partnerIsBot: boolean;
+  /** true면 conversations.history 로 상대 메시지까지 합쳐 가져온 채널 */
+  hasFullContext: boolean;
   messages: SlackDigestMessage[];
 }
 
@@ -286,39 +293,163 @@ export async function buildSlackDigest(
   }
   const users = await resolveUsersBatch(userIdsToResolve);
 
-  const channels: SlackDigestChannel[] = [];
-  for (const b of Array.from(buckets.values()).sort(
-    (a, z) => z.matches.length - a.matches.length,
-  )) {
-    let label: string;
-    let partnerIsBot = false;
+  // 1차 통과 — 봇 DM 필터링 후 어느 채널이 history 호출 대상인지 결정
+  type EnrichedBucket = {
+    bucket: ChannelBucket;
+    label: string;
+    partnerIsBot: boolean;
+  };
+  const labelOf = (b: ChannelBucket): { label: string; partnerIsBot: boolean } => {
     if (b.kind === "dm") {
       const partnerId = b.name;
       const partner = users.get(partnerId);
-      partnerIsBot = !!partner?.isBot;
-      label = `DM ↔ ${partner?.realName ?? partnerId}`;
-    } else if (b.kind === "private") {
-      label = `private #${b.name || b.id}`;
-    } else if (b.kind === "public") {
-      label = `#${b.name || b.id}`;
-    } else {
-      label = b.name || b.id;
+      return {
+        label: `DM ↔ ${partner?.realName ?? partnerId}`,
+        partnerIsBot: !!partner?.isBot,
+      };
     }
-    if (partnerIsBot && !opts.includeBotDms) continue;
+    if (b.kind === "private") return { label: `private #${b.name || b.id}`, partnerIsBot: false };
+    if (b.kind === "public") return { label: `#${b.name || b.id}`, partnerIsBot: false };
+    return { label: b.name || b.id, partnerIsBot: false };
+  };
 
-    const messages: SlackDigestMessage[] = b.matches
-      .sort((a, z) => Number(a.ts) - Number(z.ts))
-      .map((m) => ({
-        isoAt: toIsoKst(m.ts),
-        text: resolveMentions(m.text ?? "", users),
-        permalink: m.permalink,
-      }));
+  const enriched: EnrichedBucket[] = Array.from(buckets.values())
+    .map((bucket) => ({ bucket, ...labelOf(bucket) }))
+    .filter((e) => opts.includeBotDms || !e.partnerIsBot)
+    .sort((a, z) => z.bucket.matches.length - a.bucket.matches.length);
+
+  // ≥5 본인 메시지인 채널만 conversations.history 로 상대 발화까지 가져옴.
+  const HISTORY_THRESHOLD = 5;
+  const HISTORY_LIMIT = 200;
+  const oldestUnix = Math.floor(from.getTime() / 1000).toString();
+  const latestUnix = Math.floor(to.getTime() / 1000).toString();
+
+  interface HistoryMsg {
+    ts: string;
+    text?: string;
+    user?: string;
+    subtype?: string;
+    bot_id?: string;
+    bot_profile?: { name?: string };
+  }
+  const histories = new Map<string, HistoryMsg[]>();
+  const eligibleForHistory = enriched.filter(
+    (e) => e.bucket.matches.length >= HISTORY_THRESHOLD,
+  );
+  await Promise.all(
+    eligibleForHistory.map(async (e) => {
+      try {
+        const r = await slackFetch<
+          SlackResponse & { messages?: HistoryMsg[] }
+        >("conversations.history", {
+          channel: e.bucket.id,
+          oldest: oldestUnix,
+          latest: latestUnix,
+          limit: String(HISTORY_LIMIT),
+          inclusive: "true",
+        });
+        // history 는 newest-first → 시간순 정렬을 위해 뒤집음
+        histories.set(e.bucket.id, (r.messages ?? []).slice().reverse());
+      } catch {
+        // 권한 부족 (groups:history 등) 또는 채널 접근 안 됨 — search-only 로 fallback
+      }
+    }),
+  );
+
+  // 2차 user 해소 — history 메시지 작성자 + history 텍스트의 멘션
+  const moreUserIds: string[] = [];
+  for (const arr of histories.values()) {
+    for (const m of arr) {
+      if (m.user) moreUserIds.push(m.user);
+      const t = m.text ?? "";
+      const re = /<@(U[A-Z0-9]+)(?:\|[^>]+)?>/g;
+      let mt: RegExpExecArray | null;
+      while ((mt = re.exec(t)) !== null) moreUserIds.push(mt[1]);
+    }
+  }
+  const additional = await resolveUsersBatch(moreUserIds);
+  for (const [k, v] of additional) if (!users.has(k)) users.set(k, v);
+
+  // history 메시지 중 노이즈성 시스템 메시지 (참여/퇴장 등) 제외
+  const SYSTEM_SUBTYPES = new Set([
+    "channel_join",
+    "channel_leave",
+    "channel_topic",
+    "channel_purpose",
+    "channel_name",
+    "channel_archive",
+    "channel_unarchive",
+  ]);
+
+  const channels: SlackDigestChannel[] = [];
+  for (const e of enriched) {
+    const b = e.bucket;
+    const hist = histories.get(b.id);
+    let messages: SlackDigestMessage[];
+
+    if (hist && hist.length > 0) {
+      // 양쪽 발화 합치기. ts 로 dedupe (search 와 history 가 같은 메시지 중복).
+      const byTs = new Map<string, SlackDigestMessage>();
+
+      // 1) history 의 모든 메시지 (시스템 메시지 제외)
+      for (const m of hist) {
+        if (m.subtype && SYSTEM_SUBTYPES.has(m.subtype)) continue;
+        const text = (m.text ?? "").trim();
+        if (!text) continue;
+        const isMe = !!myUserId && m.user === myUserId;
+        const author = isMe
+          ? "나"
+          : m.user
+            ? users.get(m.user)?.realName ?? m.user
+            : m.bot_profile?.name ?? "bot";
+        byTs.set(m.ts, {
+          isoAt: toIsoKst(m.ts),
+          author,
+          isMe,
+          text: resolveMentions(text, users),
+        });
+      }
+      // 2) search 결과로 permalink 보강 (같은 ts 면 덮어쓰지 않고 permalink 만)
+      for (const sm of b.matches) {
+        const existing = byTs.get(sm.ts);
+        if (existing) {
+          if (!existing.permalink && sm.permalink) {
+            existing.permalink = sm.permalink;
+          }
+        } else {
+          // history 엔 없는데 search 에만 있는 경우 (스레드 답글 등) — 그대로 추가
+          byTs.set(sm.ts, {
+            isoAt: toIsoKst(sm.ts),
+            author: "나",
+            isMe: true,
+            text: resolveMentions(sm.text ?? "", users),
+            permalink: sm.permalink,
+          });
+        }
+      }
+
+      messages = Array.from(byTs.values()).sort((a, z) =>
+        a.isoAt < z.isoAt ? -1 : a.isoAt > z.isoAt ? 1 : 0,
+      );
+    } else {
+      // search-only — 본인 메시지만
+      messages = b.matches
+        .sort((a, z) => Number(a.ts) - Number(z.ts))
+        .map((m) => ({
+          isoAt: toIsoKst(m.ts),
+          author: "나",
+          isMe: true,
+          text: resolveMentions(m.text ?? "", users),
+          permalink: m.permalink,
+        }));
+    }
 
     channels.push({
       id: b.id,
-      label,
+      label: e.label,
       kind: b.kind,
-      partnerIsBot,
+      partnerIsBot: e.partnerIsBot,
+      hasFullContext: !!hist && hist.length > 0,
       messages,
     });
   }

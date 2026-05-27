@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, shell, dialog, ipcMain, nativeTheme } from "electron";
+import { app, BrowserWindow, Menu, shell, dialog, ipcMain, nativeTheme, powerMonitor } from "electron";
 import { spawn, execFile, type ChildProcess } from "child_process";
 import { promisify } from "node:util";
 import * as path from "path";
@@ -711,6 +711,14 @@ async function checkAndApplyUpdateBackground(): Promise<void> {
   if (process.env.COCKPIT_NO_AUTO_UPDATE === "1") return;
   // git repo가 아니면 스킵
   if (!fs.existsSync(path.join(ROOT, ".git"))) return;
+  // 이미 재시작 대기 / 진행 중이면 중복 호출 skip — banner 깜빡임 방지
+  if (
+    updateStatus === "ready" ||
+    updateStatus === "checking" ||
+    updateStatus === "updating"
+  ) {
+    return;
+  }
 
   try {
     setUpdateStatus("checking");
@@ -788,6 +796,24 @@ app.whenReady().then(async () => {
         console.warn("[cockpit] updater:", (err as Error).message),
       );
     }, 2000);
+    // 앱이 켜져 있는 동안에도 주기적 체크 — 기본 6시간 (하루 4회).
+    // COCKPIT_UPDATE_CHECK_INTERVAL_MS 로 조정, 0 이면 비활성화.
+    const intervalMs = Number(
+      process.env.COCKPIT_UPDATE_CHECK_INTERVAL_MS ?? 6 * 60 * 60 * 1000,
+    );
+    if (Number.isFinite(intervalMs) && intervalMs > 0) {
+      setInterval(() => {
+        checkAndApplyUpdateBackground().catch((err) =>
+          console.warn("[cockpit] updater(interval):", (err as Error).message),
+        );
+      }, intervalMs);
+    }
+    // macOS 슬립 후 깨어났을 때도 한 번 더 체크 — setInterval 은 슬립 동안 누락.
+    powerMonitor.on("resume", () => {
+      checkAndApplyUpdateBackground().catch((err) =>
+        console.warn("[cockpit] updater(resume):", (err as Error).message),
+      );
+    });
   } catch (err) {
     console.error("[cockpit] 서버 시작 실패:", err);
     // 에러 상세 표시 (stderr 수집 포함)

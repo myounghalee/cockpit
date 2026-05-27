@@ -21,6 +21,9 @@ export function TerminalWorkspace() {
   const hydrated = useTerminalStore((s) => s.hydrated);
   const createTab = useTerminalStore((s) => s.createTab);
   const closeTab = useTerminalStore((s) => s.closeTab);
+  const splitRightmostInActiveTab = useTerminalStore(
+    (s) => s.splitRightmostInActiveTab,
+  );
   const syncWithServer = useTerminalStore((s) => s.syncWithServer);
   const openNewTabPicker = useNewTabPickerStore((s) => s.openPicker);
   const router = useRouter();
@@ -48,7 +51,7 @@ export function TerminalWorkspace() {
 
   // 전역 단축키
   //  ⌘T        → 프로젝트 선택 picker 열기 (키보드 네비로 선택 후 엔터)
-  //  ⌘⇧T       → picker 열기 (split 모드) — 활성 탭 우측에 선택한 cwd 로 split
+  //  ⌘⇧T       → 활성 탭 우측에 새 터미널 즉시 split (picker 없음)
   //  ⌘W        → 활성 탭 닫기 (confirm 다이얼로그)
   //  ⌘⇧←/→    → 같은 탭의 split 내 pane 포커스 이동 (wrap)
   //  ⌘⌥←/→    → 이전/다음 탭 전환 (wrap)
@@ -156,9 +159,14 @@ export function TerminalWorkspace() {
         if (typeof window !== "undefined" && window.location.pathname !== "/terminal") {
           router.push("/terminal");
         }
-        // ⌘T  → picker (new 모드, 새 탭)
-        // ⌘⇧T → picker (split 모드, 활성 탭에 split) — 위치 선택 가능
-        openNewTabPicker(e.shiftKey ? "split" : "new");
+        if (e.shiftKey) {
+          // ⌘⇧T → 활성 탭 가장 오른쪽 pane 기준으로 즉시 horizontal split
+          // (picker 거치지 않음). 비-터미널 탭이면 store 측에서 no-op.
+          void splitRightmostInActiveTab();
+        } else {
+          // ⌘T → picker (new 모드, 새 탭)
+          openNewTabPicker("new");
+        }
       } else if (
         (e.key === "w" || e.key === "W") &&
         activeTabId &&
@@ -175,7 +183,7 @@ export function TerminalWorkspace() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [activeTabId, createTab, closeTab, openNewTabPicker, router]);
+  }, [activeTabId, createTab, closeTab, openNewTabPicker, splitRightmostInActiveTab, router]);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
 

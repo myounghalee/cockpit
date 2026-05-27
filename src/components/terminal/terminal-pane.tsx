@@ -156,7 +156,11 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
     mql?.addEventListener?.("change", onSystemThemeChange);
 
     const fit = new FitAddon();
-    const webLinks = new WebLinksAddon();
+    // 링크 클릭 → 새 창(외부 브라우저)으로. Electron 측 setWindowOpenHandler 가
+    // 127.0.0.1 외부 URL 을 shell.openExternal 로 받아 기본 브라우저로 넘긴다.
+    const webLinks = new WebLinksAddon((event, uri) => {
+      window.open(uri, "_blank", "noopener,noreferrer");
+    });
     term.loadAddon(fit);
     term.loadAddon(webLinks);
 
@@ -202,26 +206,13 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
     ws.connect();
 
     // Shift+Enter → 줄바꿈 전송 (Claude CLI 멀티라인 입력용)
-    // Esc → xterm blur (shell 에 전달 안 함) — 외부 포커스로 빠져나오기
+    // Esc 는 shell 로 그대로 전달 (vim/less/Claude CLI 등에서 필요)
     // 한글 IME 조합 중(isComposing)에는 무시하여 이중 입력 방지
     term.attachCustomKeyEventHandler((e) => {
       if (e.isComposing) return true;
       if (e.key === "Enter" && e.shiftKey) {
         if (e.type === "keydown") {
           ws.send({ type: "input", data: "\n" });
-        }
-        return false;
-      }
-      if (e.key === "Escape" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        if (e.type === "keydown") {
-          // blur하면 xterm textarea에서 포커스 빠져나옴 → 외부 window keydown 이
-          // 다시 받을 수 있게 됨. shell 로 Esc 전달은 차단(대부분 불필요).
-          term.blur();
-          // 포커스를 body 로 명시적 이동 (아니면 xterm 컨테이너에 남을 수 있음)
-          requestAnimationFrame(() => {
-            (document.activeElement as HTMLElement | null)?.blur?.();
-            document.body.focus?.();
-          });
         }
         return false;
       }

@@ -167,6 +167,41 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
     term.open(containerRef.current);
     fit.fit();
 
+    // 드래그 복사 시 라인별 trailing whitespace 제거.
+    // xterm 은 grid 단위로 선택하기 때문에 빈 셀이 모두 스페이스로 복사된다.
+    // copy 이벤트를 가로채 텍스트 영역만 남기고 끝 공백을 제거.
+    const onCopy = (e: ClipboardEvent) => {
+      if (!term.hasSelection()) return;
+      const sel = term.getSelection();
+      if (!sel) return;
+      const trimmed = sel
+        .split("\n")
+        .map((line) => line.replace(/[\t ]+$/, ""))
+        .join("\n");
+      e.clipboardData?.setData("text/plain", trimmed);
+      e.preventDefault();
+    };
+    const copyTarget = containerRef.current;
+    copyTarget.addEventListener("copy", onCopy);
+
+    // 휠로 내리다 멈춘 직후 baseY 근처 (5줄 이내) 면 자동 하단 정렬.
+    // 사용자가 down 휠로 내리는 동안 새 출력이 계속 들어오면 baseY 가 wheel
+    // 보다 빨리 늘어나 영원히 못 따라잡는 race 가 생긴다 — 휠 멈춘 시점에 한 번 snap.
+    // 정말로 스크롤백 위에 머무는 경우(거리 > 5)에는 건드리지 않음.
+    let wheelEndTimer: ReturnType<typeof setTimeout> | null = null;
+    const wheelHandler = () => {
+      if (wheelEndTimer) clearTimeout(wheelEndTimer);
+      wheelEndTimer = setTimeout(() => {
+        wheelEndTimer = null;
+        const buf = term.buffer.active;
+        const distance = buf.baseY - buf.viewportY;
+        if (distance > 0 && distance <= 5) {
+          term.scrollToBottom();
+        }
+      }, 150);
+    };
+    copyTarget.addEventListener("wheel", wheelHandler, { passive: true });
+
     const ws = new PtyWsClient(pane.id);
     // 이 이펙트 내에서만 true → 신규 연결 시 한 번만 initialInput 주입
     let initialInputSent = false;
@@ -268,6 +303,9 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
     wsRef.current = ws;
 
     return () => {
+      copyTarget.removeEventListener("copy", onCopy);
+      copyTarget.removeEventListener("wheel", wheelHandler);
+      if (wheelEndTimer) clearTimeout(wheelEndTimer);
       resizeObserver.disconnect();
       themeObserver.disconnect();
       mql?.removeEventListener?.("change", onSystemThemeChange);

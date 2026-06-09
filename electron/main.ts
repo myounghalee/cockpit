@@ -336,6 +336,9 @@ function startServer(): void {
       NODE_ENV: app.isPackaged ? "production" : "development",
       // 서버가 부모(Electron) 생사를 감시해 고아화되면 자동 종료하도록
       COCKPIT_PARENT_PID: String(process.pid),
+      // 터미널 탭을 한참 안 봐도 셸이 죽지 않도록 idle 타임아웃 비활성화.
+      // (구독자=0 인 PTY 도 영구 유지 — 탭을 명시적으로 닫을 때만 정리)
+      COCKPIT_PTY_IDLE_TIMEOUT_MS: "0",
     },
     stdio: ["ignore", "pipe", "pipe"],
     shell: process.platform === "win32",

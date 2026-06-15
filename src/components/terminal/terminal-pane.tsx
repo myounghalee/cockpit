@@ -167,60 +167,17 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
     term.open(containerRef.current);
     fit.fit();
 
-    // 드래그 복사 시 텍스트 정제.
-    //  1) xterm 의 wrap 정보를 활용해 길어서 끊긴 줄을 한 줄로 합침 (URL 등)
-    //  2) 모든 줄에 공통으로 들어있는 indent 공백을 제거 (Claude CLI 박스 출력 등)
-    //  3) 라인별 trailing whitespace 제거 — xterm 은 grid 단위 선택이라 빈 셀이 ' ' 로 복사됨
+    // 드래그 복사 시 라인별 trailing whitespace 제거.
+    // xterm 은 grid 단위로 선택하기 때문에 빈 셀이 모두 스페이스로 복사된다.
+    // copy 이벤트를 가로채 텍스트 영역만 남기고 끝 공백을 제거.
     const onCopy = (e: ClipboardEvent) => {
       if (!term.hasSelection()) return;
       const sel = term.getSelection();
       if (!sel) return;
-
-      // ── 1) buffer.isWrapped 로 줄 재구성 ──
-      let lines: string[] = sel.split("\n");
-      const range = term.getSelectionPosition();
-      const buffer = term.buffer.active;
-      if (range) {
-        const rebuilt: string[] = [];
-        for (let y = range.start.y; y <= range.end.y; y++) {
-          const line = buffer.getLine(y);
-          if (!line) continue;
-          // 다음 줄이 wrap 이면 이 줄 끝의 trailing space 는 유지 (실 텍스트가 셀 끝까지일 수 있음).
-          const next = y < range.end.y ? buffer.getLine(y + 1) : null;
-          const trimRight = !next?.isWrapped;
-          let text = line.translateToString(trimRight);
-          // 첫/끝 라인은 선택 좌표로 잘라냄.
-          if (y === range.end.y) text = text.slice(0, range.end.x);
-          if (y === range.start.y) text = text.slice(range.start.x);
-          if (line.isWrapped && rebuilt.length > 0) {
-            rebuilt[rebuilt.length - 1] += text;
-          } else {
-            rebuilt.push(text);
-          }
-        }
-        if (rebuilt.length > 0) lines = rebuilt;
-      }
-
-      // ── 2) 공통 indent (공백/탭) 제거 ──
-      const nonEmpty = lines.filter((l) => l.length > 0);
-      if (nonEmpty.length > 0) {
-        let common = nonEmpty[0].match(/^[ \t]*/)?.[0] ?? "";
-        for (const l of nonEmpty) {
-          const ind = l.match(/^[ \t]*/)?.[0] ?? "";
-          let i = 0;
-          while (i < common.length && i < ind.length && common[i] === ind[i]) i++;
-          common = common.slice(0, i);
-          if (!common) break;
-        }
-        if (common) {
-          lines = lines.map((l) =>
-            l.startsWith(common) ? l.slice(common.length) : l,
-          );
-        }
-      }
-
-      // ── 3) 라인별 trailing whitespace 제거 ──
-      const trimmed = lines.map((l) => l.replace(/[\t ]+$/, "")).join("\n");
+      const trimmed = sel
+        .split("\n")
+        .map((line) => line.replace(/[\t ]+$/, ""))
+        .join("\n");
       e.clipboardData?.setData("text/plain", trimmed);
       e.preventDefault();
     };

@@ -28,19 +28,59 @@ if [[ "$NODE_MAJOR" -lt 20 ]]; then
 fi
 
 # ---------- pnpm 체크 ----------
+ensure_pnpm_on_path() {
+  # 후보 경로들을 PATH 앞에 추가 (macOS/Linux 공식 인스톨러 위치, npm prefix)
+  local candidates=(
+    "$HOME/Library/pnpm"
+    "$HOME/.local/share/pnpm"
+  )
+  local npm_prefix
+  npm_prefix=$(npm config get prefix 2>/dev/null || true)
+  [[ -n "$npm_prefix" && "$npm_prefix" != "undefined" ]] && candidates+=("$npm_prefix/bin")
+
+  for p in "${candidates[@]}"; do
+    if [[ -d "$p" ]] && [[ ":$PATH:" != *":$p:"* ]]; then
+      export PATH="$p:$PATH"
+    fi
+  done
+}
+
 if ! command -v pnpm >/dev/null 2>&1; then
   log "pnpm 설치 중…"
-  # npm -g 는 권한 문제 가능성 → 공식 인스톨러 우선, 실패 시 npm -g fallback
-  if ! curl -fsSL https://get.pnpm.io/install.sh | sh - >/dev/null 2>&1; then
-    log "공식 인스톨러 실패 — npm -g 로 재시도"
-    npm install -g pnpm || {
-      err "pnpm 설치 실패. 권한 문제라면 'sudo npm install -g pnpm' 또는 'brew install pnpm' 으로 수동 설치 후 다시 시도하세요."
-      exit 1
-    }
+
+  # 1) corepack 우선 (Node 16.9+ 내장 — Node 20 필수라 항상 있어야 함)
+  if command -v corepack >/dev/null 2>&1; then
+    log "corepack 으로 pnpm 활성화 시도…"
+    corepack enable pnpm 2>&1 || true
+    corepack prepare pnpm@latest --activate 2>&1 || true
+    ensure_pnpm_on_path
   fi
-  # PATH에 pnpm 추가 (현재 세션에도)
-  export PNPM_HOME="$HOME/.local/share/pnpm"
-  export PATH="$PNPM_HOME:$PATH"
+
+  # 2) 공식 인스톨러
+  if ! command -v pnpm >/dev/null 2>&1; then
+    log "공식 인스톨러로 재시도…"
+    curl -fsSL https://get.pnpm.io/install.sh | sh - || true
+    ensure_pnpm_on_path
+  fi
+
+  # 3) npm -g fallback
+  if ! command -v pnpm >/dev/null 2>&1; then
+    log "npm -g 로 재시도…"
+    npm install -g pnpm 2>&1 || true
+    ensure_pnpm_on_path
+  fi
+
+  # 4) 최종 확인
+  if ! command -v pnpm >/dev/null 2>&1; then
+    err "pnpm 설치 실패. 다음 중 하나로 수동 설치 후 재시도:"
+    err "  - brew install pnpm"
+    err "  - sudo npm install -g pnpm"
+    err "  - corepack enable pnpm"
+    exit 1
+  fi
+  log "pnpm 준비 완료: $(pnpm -v)"
+else
+  ensure_pnpm_on_path
 fi
 
 # ---------- Clone / Update ----------

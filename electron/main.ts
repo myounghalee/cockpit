@@ -799,10 +799,11 @@ app.whenReady().then(async () => {
         console.warn("[cockpit] updater:", (err as Error).message),
       );
     }, 2000);
-    // 앱이 켜져 있는 동안에도 주기적 체크 — 기본 6시간 (하루 4회).
+    // 앱이 켜져 있는 동안에도 주기적 체크 — 기본 1시간.
+    // 체크 비용은 `git fetch`(ref만) + rev-list 로 가벼워 부하 없음.
     // COCKPIT_UPDATE_CHECK_INTERVAL_MS 로 조정, 0 이면 비활성화.
     const intervalMs = Number(
-      process.env.COCKPIT_UPDATE_CHECK_INTERVAL_MS ?? 6 * 60 * 60 * 1000,
+      process.env.COCKPIT_UPDATE_CHECK_INTERVAL_MS ?? 60 * 60 * 1000,
     );
     if (Number.isFinite(intervalMs) && intervalMs > 0) {
       setInterval(() => {

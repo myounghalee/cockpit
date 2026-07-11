@@ -6,6 +6,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { useTerminalStore } from "@/store/terminal-store";
+import type { SelectedFileState } from "@/store/project-viewer-store";
 import {
   ExternalLink,
   Terminal as TerminalIcon,
@@ -20,6 +21,70 @@ function dirname(p: string): string {
   const idx = p.lastIndexOf("/");
   if (idx <= 0) return idx === 0 ? "/" : p;
   return p.slice(0, idx);
+}
+
+/** 프로젝트 루트 기준 상대경로에서 파일명만 추출 */
+function basename(p: string): string {
+  const idx = p.lastIndexOf("/");
+  return idx < 0 ? p : p.slice(idx + 1);
+}
+
+/**
+ * baseDir(프로젝트 루트 기준 상대 디렉토리)에서 rel 을 해석해 정규화된
+ * 루트 기준 상대경로를 돌려준다. `.`/`..` 처리. 결과는 항상 슬래시 구분.
+ */
+function resolveRelative(baseDir: string, rel: string): string {
+  const stack = rel.startsWith("/")
+    ? [] // 루트 절대경로 → 프로젝트 루트 기준
+    : baseDir.split("/").filter((s) => s && s !== ".");
+  for (const seg of rel.split("/")) {
+    if (!seg || seg === ".") continue;
+    if (seg === "..") stack.pop();
+    else stack.push(seg);
+  }
+  return stack.join("/");
+}
+
+/**
+ * 마크다운 링크 href 분류.
+ *  - "external": http(s)/mailto 등 스킴이 있거나 프로토콜-상대(//) → 새 창
+ *  - "anchor":   같은 문서 내 #앵커 → 기본 동작(새 창 X)
+ *  - "internal": 그 외 상대/루트경로 → 뷰어 내부 이동
+ */
+function classifyHref(href: string): "external" | "anchor" | "internal" {
+  const h = href.trim();
+  if (h.startsWith("#")) return "anchor";
+  if (h.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(h)) return "external";
+  return "internal";
+}
+
+/**
+ * 뷰어 내부 이동 대상 파일 정보 계산.
+ * href 는 현재 파일 기준 상대(또는 프로젝트 루트 기준 절대) 경로.
+ */
+function resolveInternalTarget(
+  href: string,
+  currentRelPath: string,
+  projectRoot: string,
+): SelectedFileState | null {
+  // #앵커·?쿼리 제거 후 URL 디코드
+  const clean = href.replace(/[?#].*$/, "");
+  if (!clean) return null;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(clean);
+  } catch {
+    decoded = clean;
+  }
+  const slash = currentRelPath.lastIndexOf("/");
+  const baseDir = slash < 0 ? "" : currentRelPath.slice(0, slash);
+  const newRel = resolveRelative(baseDir, decoded);
+  if (!newRel) return null;
+  return {
+    relPath: newRel,
+    absolutePath: `${projectRoot}/${newRel}`,
+    name: basename(newRel),
+  };
 }
 
 interface FileResponse {
@@ -41,6 +106,8 @@ interface Props {
   absolutePath: string;
   name: string;
   onClose?: () => void;
+  /** 마크다운 내부 상대 링크 클릭 시 뷰어를 다른 파일로 이동 */
+  onNavigate?: (file: SelectedFileState) => void;
 }
 
 export function FileViewerPanel({
@@ -49,6 +116,7 @@ export function FileViewerPanel({
   absolutePath,
   name,
   onClose,
+  onNavigate,
 }: Props) {
   const [data, setData] = useState<FileResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -183,7 +251,15 @@ export function FileViewerPanel({
         ) : data.binary ? (
           <BinaryPlaceholder onOpen={openInOS} />
         ) : isMarkdown && renderMode === "rendered" ? (
-          <MarkdownContent content={data.content ?? ""} />
+          <MarkdownContent
+            content={data.content ?? ""}
+            currentRelPath={relPath}
+            // absolutePath 는 항상 relPath 로 끝나므로 그 앞부분이 프로젝트 루트
+            projectRoot={absolutePath
+              .slice(0, absolutePath.length - relPath.length)
+              .replace(/[/\\]$/, "")}
+            onNavigate={onNavigate}
+          />
         ) : (
           <TextContent content={data.content ?? ""} />
         )}
@@ -192,7 +268,17 @@ export function FileViewerPanel({
   );
 }
 
-function MarkdownContent({ content }: { content: string }) {
+function MarkdownContent({
+  content,
+  currentRelPath,
+  projectRoot,
+  onNavigate,
+}: {
+  content: string;
+  currentRelPath: string;
+  projectRoot: string;
+  onNavigate?: (file: SelectedFileState) => void;
+}) {
   const fontSize = useTerminalStore((s) => s.markdownFontSize);
   return (
     <div
@@ -202,17 +288,44 @@ function MarkdownContent({ content }: { content: string }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          // 외부 링크는 새 창으로 열기 (앱 자체가 이동하는 것 방지)
-          a: ({ href, children, ...props }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              {...props}
-            >
-              {children}
-            </a>
-          ),
+          a: ({ href, children, ...props }) => {
+            const kind = href ? classifyHref(href) : "external";
+            // 프로젝트 내부 상대 링크: 새 창 대신 뷰어 안에서 파일 이동
+            if (kind === "internal" && href && onNavigate) {
+              const target = resolveInternalTarget(
+                href,
+                currentRelPath,
+                projectRoot,
+              );
+              if (target) {
+                return (
+                  <a
+                    href={href}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onNavigate(target);
+                    }}
+                    {...props}
+                  >
+                    {children}
+                  </a>
+                );
+              }
+            }
+            // 앵커(#...)는 기본 동작, 그 외(외부 링크)는 새 창으로
+            if (kind === "anchor") {
+              return (
+                <a href={href} {...props}>
+                  {children}
+                </a>
+              );
+            }
+            return (
+              <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+                {children}
+              </a>
+            );
+          },
         }}
       >
         {content}

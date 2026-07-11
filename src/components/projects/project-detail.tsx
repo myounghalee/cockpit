@@ -141,6 +141,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                 absolutePath={selectedFile.absolutePath}
                 name={selectedFile.name}
                 onClose={() => setSelectedFile(project.id, null)}
+                onNavigate={(file) => setSelectedFile(project.id, file)}
               />
             ) : (
               <div className="h-full flex items-center justify-center rounded-md border border-dashed border-[var(--color-border)] text-xs text-[var(--color-foreground-dim)] p-4 text-center">

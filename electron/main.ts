@@ -1,5 +1,5 @@
 import { app, BrowserWindow, Menu, shell, dialog, ipcMain, nativeTheme, powerMonitor } from "electron";
-import { spawn, execFile, type ChildProcess } from "child_process";
+import { spawn, execFile, execFileSync, type ChildProcess } from "child_process";
 import { promisify } from "node:util";
 import * as path from "path";
 import * as http from "http";
@@ -472,24 +472,52 @@ function createWindow(): void {
 
 // ─── 최초 설치 (패키지드 .app 전용) ───────────────────────────
 
-/** nvm으로 설치된 Node 중 가장 최신 버전의 bin 디렉토리 반환 */
-function findNvmNodeBin(): string | null {
-  const nvmRoot = path.join(os.homedir(), ".nvm", "versions", "node");
+/** 해당 bin 디렉토리의 `node -v` 를 실행해 [major,minor,patch] 반환 (없으면 null) */
+function nodeVersionOf(binDir: string): [number, number, number] | null {
   try {
-    const versions = fs
-      .readdirSync(nvmRoot)
-      .filter((v) => /^v\d+\.\d+\.\d+$/.test(v));
-    if (versions.length === 0) return null;
-    // semver desc 정렬 — 최신 버전 우선
-    versions.sort((a, b) => {
-      const [am, ai, ap] = a.slice(1).split(".").map(Number);
-      const [bm, bi, bp] = b.slice(1).split(".").map(Number);
-      return bm - am || bi - ai || bp - ap;
-    });
-    return path.join(nvmRoot, versions[0], "bin");
+    const nodePath = path.join(binDir, "node");
+    if (!fs.existsSync(nodePath)) return null;
+    const out = execFileSync(nodePath, ["-v"], {
+      encoding: "utf8",
+      timeout: 5_000,
+    }).trim();
+    const m = out.match(/^v(\d+)\.(\d+)\.(\d+)/);
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * nvm·Homebrew·시스템 경로에 설치된 Node 중 **버전이 가장 높은** bin 디렉토리 반환.
+ * (이전엔 nvm 최신만 골랐는데, nvm에 오래된 버전만 있으면 Homebrew의 신버전 Node를
+ *  가리는 문제가 있었다 — 최신 pnpm이 요구하는 Node 버전에 못 미쳐 업데이트 실패.)
+ */
+function findBestNodeBin(): string | null {
+  const home = os.homedir();
+  const candidates: string[] = [];
+  try {
+    const nvmRoot = path.join(home, ".nvm", "versions", "node");
+    for (const v of fs.readdirSync(nvmRoot)) {
+      if (/^v\d+\.\d+\.\d+$/.test(v)) candidates.push(path.join(nvmRoot, v, "bin"));
+    }
+  } catch {
+    // nvm 없음 — 무시
+  }
+  candidates.push("/opt/homebrew/bin", "/usr/local/bin");
+
+  let best: { dir: string; ver: [number, number, number] } | null = null;
+  for (const dir of candidates) {
+    const ver = nodeVersionOf(dir);
+    if (!ver) continue;
+    const higher =
+      !best ||
+      ver[0] > best.ver[0] ||
+      (ver[0] === best.ver[0] && ver[1] > best.ver[1]) ||
+      (ver[0] === best.ver[0] && ver[1] === best.ver[1] && ver[2] > best.ver[2]);
+    if (higher) best = { dir, ver };
+  }
+  return best?.dir ?? null;
 }
 
 /**
@@ -499,14 +527,18 @@ function findNvmNodeBin(): string | null {
  */
 function buildSpawnEnv(): NodeJS.ProcessEnv {
   const home = os.homedir();
-  const nvmBin = findNvmNodeBin();
+  const bestNodeBin = findBestNodeBin();
   const extraPaths: string[] = [];
-  if (nvmBin) extraPaths.push(nvmBin);
+  // 가장 최신 Node 를 맨 앞에 — 오래된 nvm Node 가 신버전을 가리지 않도록
+  if (bestNodeBin) extraPaths.push(bestNodeBin);
   extraPaths.push(
     "/opt/homebrew/bin",
     "/opt/homebrew/sbin",
     "/usr/local/bin",
     "/usr/local/sbin",
+    // pnpm standalone 설치 위치 (PNPM_HOME) — launchd PATH엔 없어 명시적으로 추가
+    process.env.PNPM_HOME ?? path.join(home, "Library", "pnpm"),
+    path.join(home, "Library", "pnpm", "bin"),
     path.join(home, ".local", "bin"),
   );
   return {

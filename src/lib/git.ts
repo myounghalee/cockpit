@@ -221,7 +221,12 @@ export async function getCommitDetail(
   const format = "%H|%an|%aI|%P|%s%n%n%b";
   const [meta, statOutput] = await Promise.all([
     git(cwd, ["show", "-s", `--pretty=format:${format}`, hash]),
-    git(cwd, ["show", hash, "--stat", "--format="]),
+    // --numstat: `--stat`은 TTY 없는 spawn 환경에서 80폭 기준으로 긴 경로를
+    //   `.../…` 로 잘라버려, 그 잘린 경로로 diff 를 요청하면 매칭 실패 → "변경 없음".
+    //   numstat 은 경로를 자르지 않고(전체 경로), 정확한 숫자를 탭 구분으로 준다.
+    // --first-parent: 머지 커밋을 combined diff(대개 빈 결과) 대신 첫 부모와의
+    //   diff 로 표시 → 머지 커밋도 파일 목록이 나온다.
+    git(cwd, ["show", hash, "--numstat", "--first-parent", "--format="]),
   ]);
 
   const [header, ...bodyParts] = meta.split("\n\n");
@@ -232,24 +237,27 @@ export async function getCommitDetail(
 
   const files: CommitDetail["files"] = [];
   for (const line of statOutput.split("\n")) {
-    // 마지막 요약 줄(e.g. "5 files changed, 10 insertions(+), 3 deletions(-)")은 '|' 없음
-    if (!line.includes("|")) continue;
-    const match = line.match(/^\s*(.+?)\s*\|\s*(\d+|Bin)\s*([+-]*)/);
+    // numstat 형식: `<adds>\t<dels>\t<path>` (바이너리는 adds/dels 가 "-")
+    const match = line.match(/^(\d+|-)\t(\d+|-)\t(.+)$/);
     if (!match) continue;
-    const [, path, , symbols] = match;
-    const additions = (symbols.match(/\+/g) || []).length;
-    const deletions = (symbols.match(/-/g) || []).length;
+    const [, addsStr, delsStr, rawPath] = match;
+    const additions = addsStr === "-" ? 0 : Number(addsStr);
+    const deletions = delsStr === "-" ? 0 : Number(delsStr);
+    const path = resolveNumstatPath(rawPath);
+    const isRename = rawPath !== path;
     files.push({
-      path: path.trim(),
+      path,
       additions,
       deletions,
-      status: additions > 0 && deletions > 0
-        ? "M"
-        : additions > 0
-          ? "A"
-          : deletions > 0
-            ? "D"
-            : "M",
+      status: isRename
+        ? "R"
+        : additions > 0 && deletions > 0
+          ? "M"
+          : additions > 0
+            ? "A"
+            : deletions > 0
+              ? "D"
+              : "M",
     });
   }
 
@@ -261,6 +269,23 @@ export async function getCommitDetail(
     parents: parentsStr ? parentsStr.split(" ").filter(Boolean) : [],
     files,
   };
+}
+
+/**
+ * numstat 의 rename 경로 표기에서 **새 경로**를 뽑는다.
+ *   "old => new"            → "new"
+ *   "src/{a => b}/File.java" → "src/b/File.java"
+ * rename 이 아니면 원본을 그대로 반환.
+ */
+function resolveNumstatPath(raw: string): string {
+  const brace = raw.match(/^(.*)\{(.*) => (.*)\}(.*)$/);
+  if (brace) {
+    const [, pre, , newMid, post] = brace;
+    return `${pre}${newMid}${post}`.replace(/\/\//g, "/");
+  }
+  const arrow = raw.split(" => ");
+  if (arrow.length === 2) return arrow[1];
+  return raw;
 }
 
 // ─── 파일 diff ────────────────────────────────────────────────
@@ -285,7 +310,18 @@ export async function getFileDiff(
     args = ["diff", "--no-index", "--no-color", "--", nullDev, opts.path];
   } else if (opts.commit) {
     validateHash(opts.commit);
-    args = ["show", "--format=", "--no-color", opts.commit, "--", opts.path];
+    // --first-parent: 머지 커밋은 기본 combined diff 라 충돌 없는 머지면 빈 결과가
+    //   되어 "변경 없음" 으로 보인다. 첫 부모와 비교해 실제 diff 를 표시.
+    //   (부모가 하나인 일반 커밋에는 영향 없음)
+    args = [
+      "show",
+      "--format=",
+      "--no-color",
+      "--first-parent",
+      opts.commit,
+      "--",
+      opts.path,
+    ];
   } else if (opts.staged) {
     args = ["diff", "--cached", "--no-color", "--", opts.path];
   } else {

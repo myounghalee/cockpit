@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import { BarChart3, Calendar as CalendarIcon, FileText, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useProjects } from "@/hooks/use-projects";
-import { useActiveProjectStore } from "@/store/active-project-store";
+import { useProjectScope } from "@/store/project-scope-store";
+import { ProjectSelect } from "@/components/projects/project-select";
 import { CalendarTab } from "@/components/insights/calendar-tab";
 import { StatsTab } from "@/components/insights/stats-tab";
 import { DailyTab } from "@/components/insights/daily-tab";
@@ -20,18 +20,10 @@ const RANGES: Record<RangeKey, { label: string; days: number }> = {
 };
 
 export default function InsightsPage() {
-  const { data: projectsData } = useProjects();
-  const projects = projectsData?.projects ?? [];
-  const activeId = useActiveProjectStore((s) => s.activeProjectId);
-  const explicitlyUnset = useActiveProjectStore((s) => s.explicitlyUnset);
-
   const [tab, setTab] = useState<TabKey>("daily");
   const [range, setRange] = useState<RangeKey>("30d");
-  // 프로젝트 필터: null = 전체, string = 특정 ID
-  // 초기값: 활성 프로젝트(해제 상태면 null)
-  const [projectFilter, setProjectFilter] = useState<string | null>(() =>
-    explicitlyUnset ? null : activeId,
-  );
+  // 프로젝트 필터: null = 전체, string = 특정 ID. 마지막 선택은 persist된다.
+  const [projectFilter, setProjectFilter] = useProjectScope("insights");
 
   const { from, to } = useMemo(() => {
     const to = new Date();
@@ -100,22 +92,7 @@ export default function InsightsPage() {
 
         {/* 프로젝트 필터 — Daily 탭에선 프로젝트 구분이 파일 안에 이미 들어있어 숨김 */}
         {tab !== "daily" && (
-          <select
-            value={projectFilter ?? "__all__"}
-            onChange={(e) =>
-              setProjectFilter(
-                e.target.value === "__all__" ? null : e.target.value,
-              )
-            }
-            className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-          >
-            <option value="__all__">전체 프로젝트</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <ProjectSelect value={projectFilter} onChange={setProjectFilter} />
         )}
       </header>
 

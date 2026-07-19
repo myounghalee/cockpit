@@ -2,12 +2,13 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type {
   CreateTerminalResponse,
+  PaneType,
   SplitDirection,
   SplitNode,
   TerminalPane,
   TerminalTab,
 } from "@/types/terminal";
-import { useActiveProjectStore } from "./active-project-store";
+import { isNonTerminalPane, paneIdHasPty } from "@/types/terminal";
 
 /**
  * 터미널 워크스페이스 상태.
@@ -109,6 +110,10 @@ interface TerminalState {
   setFilePath: (id: string, filePath: string) => void;
   /** 메모 뷰어 탭 생성 — memoId 필수. 이미 열린 동일 memoId 탭이 있으면 그 탭을 활성화. */
   createMemoTab: (memoId: string, tabName?: string) => string;
+  /** Git 탭 생성 — 이미 열린 동일 projectId 탭이 있으면 그 탭을 활성화. */
+  createGitTab: (projectId: string, tabName?: string) => string;
+  /** git pane이 보여줄 프로젝트 변경 */
+  setPaneProject: (paneId: string, projectId: string | null) => void;
   /** 최근 파일 히스토리에 경로 추가 (파일 로드 성공 후 호출) */
   addRecentFile: (filePath: string) => void;
   /** 최근 URL 히스토리에 URL 추가 (브라우저 이동 시 호출) */
@@ -138,10 +143,11 @@ interface TerminalState {
     direction: SplitDirection,
     opts?: {
       cwd?: string;
-      type?: "terminal" | "browser" | "file" | "memo";
+      type?: PaneType;
       url?: string;
       filePath?: string;
       memoId?: string;
+      projectId?: string;
       title?: string;
     },
   ) => Promise<void>;
@@ -149,7 +155,7 @@ interface TerminalState {
 
   /**
    * 현재 활성 탭의 가장 오른쪽 pane 기준으로 horizontal split을 추가해 터미널 생성.
-   * cwd 미지정 시 active project path 사용. 활성 탭이 터미널 탭이 아니면 no-op.
+   * cwd 미지정 시 서버 기본값. 활성 탭이 터미널 탭이 아니면 no-op.
    * ⌘⇧T 단축키용.
    */
   splitRightmostInActiveTab: (cwd?: string) => Promise<void>;
@@ -173,14 +179,10 @@ async function createPty(opts?: {
   cwd?: string;
   projectId?: string;
 }): Promise<CreateTerminalResponse> {
+  // cwd/projectId 둘 다 없으면 서버 기본값(DEFAULT_CWD)으로 연다.
   const body: { cwd?: string; projectId?: string } = {};
   if (opts?.cwd) body.cwd = opts.cwd;
   else if (opts?.projectId) body.projectId = opts.projectId;
-  else {
-    const active = useActiveProjectStore.getState();
-    if (active.activeProjectPath) body.cwd = active.activeProjectPath;
-    else if (active.activeProjectId) body.projectId = active.activeProjectId;
-  }
 
   const res = await fetch("/api/terminals", {
     method: "POST",
@@ -245,7 +247,7 @@ async function recreateDeadPanes(
 ): Promise<SplitNode | null> {
   if (node.type === "leaf") {
     const { pane } = node;
-    if (pane.type === "browser" || pane.type === "file" || pane.type === "memo") {
+    if (isNonTerminalPane(pane.type)) {
       return node;
     }
     // 터미널 pane
@@ -379,6 +381,29 @@ function updateFilePanePath(
   };
 }
 
+/** git pane이 보여줄 프로젝트를 교체 */
+function updateGitPaneProject(
+  node: SplitNode,
+  paneId: string,
+  projectId: string | null,
+): SplitNode {
+  if (node.type === "leaf") {
+    if (node.pane.id === paneId && node.pane.type === "git") {
+      return {
+        type: "leaf",
+        pane: { ...node.pane, projectId: projectId ?? undefined },
+      };
+    }
+    return node;
+  }
+  return {
+    ...node,
+    children: node.children.map((c) =>
+      updateGitPaneProject(c, paneId, projectId),
+    ),
+  };
+}
+
 /**
  * 같은 부모 split 내에 두 pane이 모두 direct child이면 순서 swap.
  * 다른 split에 있으면 변경 없음.
@@ -448,6 +473,16 @@ async function cloneSplitNode(node: SplitNode): Promise<SplitNode | null> {
         title: pane.title,
         type: "memo",
         memoId: pane.memoId ?? "",
+      };
+      return { type: "leaf", pane: newPane };
+    }
+    if (pane.type === "git") {
+      const newPane: TerminalPane = {
+        id: `git-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        cwd: pane.cwd,
+        title: pane.title,
+        type: "git",
+        projectId: pane.projectId ?? "",
       };
       return { type: "leaf", pane: newPane };
     }
@@ -579,7 +614,7 @@ export const useTerminalStore = create<TerminalState>()(
           // ring/dot 깜빡임 트리거 안 함 (cmux 와 동일 원칙).
           // 그래도 lastNotification 자체는 기록해서 툴팁/히스토리 용도로 보존.
           const owningTab = s.tabs.find((t) => {
-            if (t.type === "browser" || t.type === "file" || t.type === "memo") {
+            if (isNonTerminalPane(t.type)) {
               return false;
             }
             return findAllPanes(t.root).some((p) => p.id === paneId);
@@ -641,7 +676,7 @@ export const useTerminalStore = create<TerminalState>()(
         const tab = get().tabs.find((t) => t.id === tabId);
         if (!tab) return;
         // 브라우저/파일/메모 탭은 pty 없음 → 그냥 state에서만 제거
-        if (tab.type === "browser" || tab.type === "file" || tab.type === "memo") {
+        if (isNonTerminalPane(tab.type)) {
           set((s) => {
             const remaining = s.tabs.filter((t) => t.id !== tabId);
             const nextActive =
@@ -681,11 +716,7 @@ export const useTerminalStore = create<TerminalState>()(
           // setPaneStatus 에서 acknowledged=false 로 자동 리셋되어 다시 알림.
           const tab = s.tabs.find((t) => t.id === tabId);
           if (
-            !tab ||
-            tab.type === "browser" ||
-            tab.type === "file" ||
-            tab.type === "memo"
-          ) {
+            !tab || isNonTerminalPane(tab.type)) {
             return { activeTabId: tabId };
           }
           const panes = findAllPanes(tab.root);
@@ -797,6 +828,48 @@ export const useTerminalStore = create<TerminalState>()(
         set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tabId }));
         return tabId;
       },
+
+      createGitTab: (projectId, tabName) => {
+        // 같은 프로젝트의 Git 탭이 이미 있으면 새로 만들지 않고 활성화만
+        const existing = get().tabs.find(
+          (t) => t.type === "git" && t.url === projectId,
+        );
+        if (existing) {
+          set({ activeTabId: existing.id });
+          return existing.id;
+        }
+        const tabId = `git-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const name = tabName ?? "Git";
+        const pane: TerminalPane = {
+          id: tabId,
+          cwd: "",
+          title: name,
+          initialInput: null,
+          type: "git",
+          projectId,
+        };
+        const tab: TerminalTab = {
+          id: tabId,
+          name,
+          root: { type: "leaf", pane },
+          type: "git",
+          url: projectId,
+        };
+        set((s) => ({ tabs: [...s.tabs, tab], activeTabId: tabId }));
+        return tabId;
+      },
+
+      setPaneProject: (paneId, projectId) =>
+        set((s) => ({
+          tabs: s.tabs.map((t) => ({
+            ...t,
+            root: updateGitPaneProject(t.root, paneId, projectId),
+            // 탭 자체가 git 탭이면 식별자(url)도 함께 갱신 — 중복 탭 판정 기준
+            ...(t.id === paneId && t.type === "git"
+              ? { url: projectId ?? "" }
+              : {}),
+          })),
+        })),
 
       addRecentFile: (filePath) => {
         const p = filePath.trim();
@@ -945,6 +1018,14 @@ export const useTerminalStore = create<TerminalState>()(
             type: "memo",
             memoId: opts.memoId ?? "",
           };
+        } else if (opts?.type === "git") {
+          newPane = {
+            id: `git-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            cwd: "",
+            title: opts.title ?? "Git",
+            type: "git",
+            projectId: opts.projectId ?? "",
+          };
         } else {
           // opts.cwd가 명시되면 그 경로, 아니면 현재 패널 cwd를 기본으로 사용.
           const res = await createPty({ cwd: opts?.cwd ?? currentPane?.cwd });
@@ -975,22 +1056,16 @@ export const useTerminalStore = create<TerminalState>()(
         const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
         // 터미널 탭이 아니면 (browser/file/memo) 아무것도 안 함
         if (
-          !activeTab ||
-          activeTab.type === "browser" ||
-          activeTab.type === "file" ||
-          activeTab.type === "memo"
-        ) {
+          !activeTab || isNonTerminalPane(activeTab.type)) {
           return;
         }
         const targetPaneId = rightmostLeafPaneId(activeTab.root);
-        const resolvedCwd =
-          cwd ?? useActiveProjectStore.getState().activeProjectPath ?? undefined;
-        await get().splitPane(targetPaneId, "horizontal", { cwd: resolvedCwd });
+        await get().splitPane(targetPaneId, "horizontal", { cwd });
       },
 
       closePane: async (paneId) => {
-        // 브라우저/파일 pane은 pty 없음
-        if (!paneId.startsWith("browser-") && !paneId.startsWith("file-")) {
+        // browser/file/memo/git pane은 pty가 없다 (id 접두사로 판별)
+        if (paneIdHasPty(paneId)) {
           await deletePty(paneId);
         }
         set((s) => {
@@ -1021,7 +1096,7 @@ export const useTerminalStore = create<TerminalState>()(
           // 죽은 터미널 pane은 같은 cwd로 새 PTY 생성 → 앱 재시작 후 레이아웃 유지
           const updatedTabs: TerminalTab[] = [];
           for (const t of get().tabs) {
-            if (t.type === "browser" || t.type === "file" || t.type === "memo") {
+            if (isNonTerminalPane(t.type)) {
               updatedTabs.push(t);
               continue;
             }

@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Archive, ArchiveRestore, StickyNote } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useMemos, type MemoProjectFilter } from "@/hooks/use-memos";
-import { useProjects } from "@/hooks/use-projects";
-import { useActiveProjectStore } from "@/store/active-project-store";
+import { useMemos } from "@/hooks/use-memos";
+import { useProjectScope } from "@/store/project-scope-store";
+import { ProjectSelect } from "@/components/projects/project-select";
 import { MemoList } from "@/components/memo/memo-list";
 import { MemoEditor } from "@/components/memo/memo-editor";
 import { NewMemoDialog } from "@/components/memo/new-memo-dialog";
@@ -13,12 +13,8 @@ import { ConvertDialog } from "@/components/memo/convert-dialog";
 import type { Memo } from "@/types/memo";
 
 export default function TodoPage() {
-  const { data: projectsData } = useProjects();
-  const projects = projectsData?.projects ?? [];
-  const activeId = useActiveProjectStore((s) => s.activeProjectId);
-
-  // 필터: null (전체) | "__global__" (전역만) | projectId
-  const [filter, setFilter] = useState<MemoProjectFilter>(null);
+  // 필터: null (전체) | "__global__" (전역만) | projectId. 마지막 선택은 persist된다.
+  const [filter, setFilter] = useProjectScope("memo");
   const [showArchived, setShowArchived] = useState(false);
 
   const { data, isLoading } = useMemos(filter, { archived: showArchived });
@@ -51,31 +47,14 @@ export default function TodoPage() {
           <h1 className="text-sm font-semibold">Memo</h1>
         </div>
 
-        <select
-          value={filter === null ? "__all__" : filter}
-          onChange={(e) => {
-            const v = e.target.value;
-            setFilter(v === "__all__" ? null : (v as MemoProjectFilter));
-          }}
-          className="h-8 rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-2 text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-        >
-          <option value="__all__">전체 메모</option>
-          <option value="__global__">전역 (프로젝트 없음)</option>
-          {activeId && (
-            <option value={activeId}>
-              {projects.find((p) => p.id === activeId)?.name ?? "(활성)"}
-            </option>
-          )}
-          <optgroup label="프로젝트">
-            {projects
-              .filter((p) => p.id !== activeId)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-          </optgroup>
-        </select>
+        <ProjectSelect
+          value={filter}
+          onChange={setFilter}
+          allLabel="전체 메모"
+          extraOptions={[
+            { value: "__global__", label: "전역 (프로젝트 없음)" },
+          ]}
+        />
 
         <div className="flex-1" />
 

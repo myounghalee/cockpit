@@ -18,7 +18,6 @@ import {
   useDeleteProject,
   useUpdateProject,
 } from "@/hooks/use-projects";
-import { useActiveProjectStore } from "@/store/active-project-store";
 import { cn } from "@/lib/utils";
 import type { Project, ProjectFolder } from "@/types/project";
 
@@ -33,8 +32,6 @@ export function ProjectItem({ project, folders, onEdit, draggable: isDraggable }
   const pathname = usePathname();
   const router = useRouter();
   const isActive = pathname === `/projects/${project.id}`;
-  const activeId = useActiveProjectStore((s) => s.activeProjectId);
-  const setActive = useActiveProjectStore((s) => s.setActive);
   const updateMut = useUpdateProject();
   const deleteMut = useDeleteProject();
 
@@ -48,8 +45,6 @@ export function ProjectItem({ project, folders, onEdit, draggable: isDraggable }
       disabled: !isDraggable,
     });
 
-  const isActiveProject = activeId === project.id;
-
   const toggleFav = () =>
     updateMut.mutate({ id: project.id, isFavorite: !project.isFavorite });
 
@@ -58,8 +53,6 @@ export function ProjectItem({ project, folders, onEdit, draggable: isDraggable }
 
   const remove = () => {
     if (!confirm(`프로젝트 "${project.name}"을(를) 삭제할까요?`)) return;
-    // 활성 프로젝트면 먼저 해제 (useEffect에서 다른 프로젝트로 자동 전환됨)
-    if (isActiveProject) setActive(null, null);
     // 프로젝트 상세 페이지에서 삭제 중이면 목록으로 이동 (404 화면 방지)
     if (isActive) router.push("/projects");
     deleteMut.mutate(project.id);
@@ -129,12 +122,6 @@ export function ProjectItem({ project, folders, onEdit, draggable: isDraggable }
 
         <span className="flex-1 min-w-0 truncate">{project.name}</span>
 
-        {isActiveProject && (
-          <span className="text-[10px] text-[var(--color-accent)] bg-[var(--color-accent)]/15 px-1.5 rounded">
-            active
-          </span>
-        )}
-
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -149,11 +136,6 @@ export function ProjectItem({ project, folders, onEdit, draggable: isDraggable }
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onSelect={() => setActive(project.id, project.path)}
-            >
-              활성 프로젝트로 설정
-            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onEdit(project)}>
               이름·폴더 수정
             </DropdownMenuItem>

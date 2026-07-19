@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useProjects } from "@/hooks/use-projects";
 import { useCreateMemo } from "@/hooks/use-memos";
-import { useActiveProjectStore } from "@/store/active-project-store";
+import { useProjectScope } from "@/store/project-scope-store";
 
 interface NewMemoDialogProps {
   open: boolean;
@@ -29,7 +29,8 @@ export function NewMemoDialog({
 }: NewMemoDialogProps) {
   const { data } = useProjects();
   const projects = data?.projects ?? [];
-  const activeId = useActiveProjectStore((s) => s.activeProjectId);
+  // 메모 화면에서 현재 보고 있는 프로젝트를 기본값으로 물려받는다
+  const [memoScopeId] = useProjectScope("memo");
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -47,9 +48,9 @@ export function NewMemoDialog({
     const initial =
       defaultProjectId === "__global__"
         ? "__global__"
-        : (defaultProjectId ?? activeId ?? "__global__");
+        : (defaultProjectId ?? memoScopeId ?? "__global__");
     setProjectId(initial);
-  }, [open, defaultProjectId, activeId]);
+  }, [open, defaultProjectId, memoScopeId]);
 
   const handleSubmit = () => {
     if (!title.trim()) return;

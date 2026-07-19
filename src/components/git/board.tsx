@@ -13,7 +13,8 @@ import { ConflictBanner } from "./conflict-banner";
 
 interface Props {
   projectId: string;
-  projectName: string;
+  /** 헤더 좌측에 놓일 프로젝트 선택기 (페이지가 주입) */
+  projectSelect: React.ReactNode;
 }
 
 interface WorkingFileSelection {
@@ -22,7 +23,7 @@ interface WorkingFileSelection {
   untracked?: boolean;
 }
 
-export function GitBoard({ projectId, projectName }: Props) {
+export function GitBoard({ projectId, projectSelect }: Props) {
   const [selectedHash, setSelectedHash] = useState<string | null>(null);
   const [workingFile, setWorkingFile] = useState<WorkingFileSelection | null>(
     null,
@@ -46,9 +47,7 @@ export function GitBoard({ projectId, projectName }: Props) {
     <div className="flex flex-col h-full min-h-0">
       {/* 상단 툴바 */}
       <header className="flex items-center gap-3 px-4 py-2.5 border-b border-[var(--color-border)] flex-wrap">
-        <div className="min-w-0">
-          <h1 className="text-sm font-semibold truncate">{projectName}</h1>
-        </div>
+        {projectSelect}
         <BranchPicker projectId={projectId} />
         <div className="flex-1" />
         <PushPullBar projectId={projectId} />

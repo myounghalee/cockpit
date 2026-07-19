@@ -1,25 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { ProjectList } from "@/components/projects/project-list";
 import { FolderOpen } from "lucide-react";
-import { useActiveProjectStore } from "@/store/active-project-store";
 import { useProjects } from "@/hooks/use-projects";
 
 export default function ProjectsPage() {
-  const router = useRouter();
-  const activeId = useActiveProjectStore((s) => s.activeProjectId);
-  const { data, isLoading } = useProjects();
-
-  // 활성 프로젝트가 있고 실제로 존재하면 → 해당 상세로 자동 이동
-  useEffect(() => {
-    if (!activeId || !data) return;
-    const exists = data.projects.some((p) => p.id === activeId);
-    if (exists) {
-      router.replace(`/projects/${activeId}`);
-    }
-  }, [activeId, data, router]);
+  const { isLoading } = useProjects();
 
   return (
     <div className="flex flex-1 min-h-0">

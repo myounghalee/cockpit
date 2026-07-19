@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { useUiStore } from "@/store/ui-store";
 import { cn } from "@/lib/utils";
-import { ActiveProjectBadge } from "./active-project-badge";
 
 interface NavItem {
   href: string;
@@ -128,9 +127,6 @@ export function Sidebar() {
           collapsed={collapsed}
         />
       </div>
-
-      {/* 활성 프로젝트 배지 */}
-      <ActiveProjectBadge collapsed={collapsed} />
 
       {/* 푸터 */}
       {!collapsed && (

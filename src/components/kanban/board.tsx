@@ -16,6 +16,7 @@ import { useTickets, useUpdateTicket } from "@/hooks/use-tickets";
 import { Button } from "@/components/ui/button";
 import { Plus, Inbox } from "lucide-react";
 import { OpenInEditorButton } from "@/components/projects/open-in-editor-button";
+import { ProjectSelect } from "@/components/projects/project-select";
 import type { Ticket, TicketStatus } from "@/types/ticket";
 import { KanbanColumn } from "./column";
 import { TicketCard } from "./ticket-card";
@@ -38,14 +39,12 @@ interface Project {
 
 interface Props {
   projectId: string | null; // null = 전체 보기
-  projectName: string;
   projects?: Project[];
   onProjectChange?: (id: string | null) => void;
 }
 
 export function KanbanBoard({
   projectId,
-  projectName,
   projects,
   onProjectChange,
 }: Props) {
@@ -88,7 +87,7 @@ export function KanbanBoard({
     ? (tickets.find((t) => t.id === runningTicketId) ?? null)
     : null;
   const showProjectBadge = !projectId; // 전체 보기일 때 프로젝트 뱃지 표시
-  const activeProjectPath =
+  const selectedProjectPath =
     projectId && projects ? projects.find((p) => p.id === projectId)?.path : null;
 
   const byStatus = (s: TicketStatus) =>
@@ -156,34 +155,20 @@ export function KanbanBoard({
         <div className="flex items-center gap-3 min-w-0">
           {/* 프로젝트 드롭다운 */}
           {projects && onProjectChange && (
-            <select
-              value={projectId ?? "__all__"}
-              onChange={(e) =>
-                onProjectChange(
-                  e.target.value === "__all__" ? null : e.target.value,
-                )
-              }
-              className="text-xs rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1.5 text-[var(--color-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-            >
-              <option value="__all__">전체</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <ProjectSelect
+              value={projectId ?? null}
+              onChange={onProjectChange}
+              allLabel="전체"
+            />
           )}
-          <div className="min-w-0">
-            <h1 className="text-base font-semibold truncate">{projectName}</h1>
-            <div className="text-[10px] text-[var(--color-foreground-dim)]">
-              {tickets.length} tickets
-            </div>
+          <div className="text-[10px] text-[var(--color-foreground-dim)] whitespace-nowrap">
+            {tickets.length} tickets
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          {projectId && activeProjectPath && (
+          {projectId && selectedProjectPath && (
             <OpenInEditorButton
-              path={activeProjectPath}
+              path={selectedProjectPath}
               className="px-2 h-7 rounded border border-[var(--color-border)] text-xs hover:bg-[var(--color-surface-hover)]"
               label="에디터로 열기"
             />

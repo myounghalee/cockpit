@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 import {
   Terminal as TerminalIcon,
   KanbanSquare,
@@ -11,7 +10,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useProject, useUpdateProject } from "@/hooks/use-projects";
-import { useActiveProjectStore } from "@/store/active-project-store";
 import { useProjectViewerStore } from "@/store/project-viewer-store";
 import { FileTree } from "./file-tree";
 import { FileViewerPanel } from "./file-viewer-panel";
@@ -20,8 +18,6 @@ import { OpenInEditorButton } from "./open-in-editor-button";
 export function ProjectDetail({ projectId }: { projectId: string }) {
   const { data: project, isLoading, error } = useProject(projectId);
   const updateMut = useUpdateProject();
-  const setActive = useActiveProjectStore((s) => s.setActive);
-  const activeId = useActiveProjectStore((s) => s.activeProjectId);
   const router = useRouter();
 
   // 선택한 파일을 projectId별로 영속 저장 → 네비게이션 간 유지
@@ -29,13 +25,6 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
     (s) => s.selectedFileByProject[projectId] ?? null,
   );
   const setSelectedFile = useProjectViewerStore((s) => s.setSelectedFile);
-
-  // 상세 진입 시 자동으로 활성 프로젝트로 설정
-  useEffect(() => {
-    if (project && activeId !== project.id) {
-      setActive(project.id, project.path);
-    }
-  }, [project, activeId, setActive]);
 
   if (isLoading) {
     return (

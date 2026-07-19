@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useProjects } from "@/hooks/use-projects";
 import { useConvertMemoToTicket } from "@/hooks/use-memos";
-import { useActiveProjectStore } from "@/store/active-project-store";
+import { useProjectScope } from "@/store/project-scope-store";
 import type { Memo } from "@/types/memo";
 
 interface ConvertDialogProps {
@@ -23,7 +23,9 @@ export function ConvertDialog({ memo, onOpenChange }: ConvertDialogProps) {
   const router = useRouter();
   const { data } = useProjects();
   const projects = data?.projects ?? [];
-  const activeId = useActiveProjectStore((s) => s.activeProjectId);
+  const [memoScopeId] = useProjectScope("memo");
+  // "__global__"은 프로젝트가 아니므로 기본값 후보에서 제외
+  const scopeProjectId = memoScopeId === "__global__" ? null : memoScopeId;
 
   const [projectId, setProjectId] = useState<string>("");
   const [autoMode, setAutoMode] = useState<string>("manual");
@@ -33,11 +35,11 @@ export function ConvertDialog({ memo, onOpenChange }: ConvertDialogProps) {
 
   useEffect(() => {
     if (!memo) return;
-    // 기본: 메모의 프로젝트 > 활성 프로젝트 > 빈 값
-    setProjectId(memo.projectId ?? activeId ?? "");
+    // 기본: 메모의 프로젝트 > 메모 화면에서 보고 있던 프로젝트 > 빈 값
+    setProjectId(memo.projectId ?? scopeProjectId ?? "");
     setAutoMode("manual");
     setCommitMode("none");
-  }, [memo, activeId]);
+  }, [memo, scopeProjectId]);
 
   if (!memo) return null;
 

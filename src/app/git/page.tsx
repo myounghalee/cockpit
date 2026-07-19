@@ -1,37 +1,77 @@
 "use client";
 
-import { useActiveProjectStore } from "@/store/active-project-store";
+import { useProjectScope } from "@/store/project-scope-store";
 import { useProject } from "@/hooks/use-projects";
 import { GitBranch, Sparkles } from "lucide-react";
 import { GitBoard } from "@/components/git/board";
+import { ProjectSelect } from "@/components/projects/project-select";
 
 export default function GitPage() {
-  const activeId = useActiveProjectStore((s) => s.activeProjectId);
-  const { data: project, isLoading } = useProject(activeId);
+  const [projectId, setProjectId] = useProjectScope("git");
+  const { data: project, isLoading } = useProject(projectId);
 
-  if (!activeId) {
-    return <EmptyState message="활성 프로젝트를 먼저 선택하세요." />;
-  }
-  if (isLoading) {
+  const selector = (
+    <ProjectSelect
+      value={projectId}
+      onChange={setProjectId}
+      allLabel={null}
+      placeholder="프로젝트 선택"
+    />
+  );
+
+  if (projectId && isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center text-xs text-[var(--color-foreground-muted)]">
-        …
-      </div>
+      <Shell selector={selector}>
+        <div className="flex-1 flex items-center justify-center text-xs text-[var(--color-foreground-muted)]">
+          …
+        </div>
+      </Shell>
+    );
+  }
+  if (!projectId) {
+    return (
+      <Shell selector={selector}>
+        <EmptyState message="위에서 프로젝트를 선택하세요." />
+      </Shell>
     );
   }
   if (!project) {
-    return <EmptyState message="프로젝트를 찾을 수 없습니다." />;
+    return (
+      <Shell selector={selector}>
+        <EmptyState message="프로젝트를 찾을 수 없습니다." />
+      </Shell>
+    );
   }
   if (!project.isGitRepo) {
     return (
-      <EmptyState
-        message={`"${project.name}"은 git 저장소가 아닙니다.`}
-        hint={`${project.path} 에서 'git init' 후 다시 시도하세요.`}
-      />
+      <Shell selector={selector}>
+        <EmptyState
+          message={`"${project.name}"은 git 저장소가 아닙니다.`}
+          hint={`${project.path} 에서 'git init' 후 다시 시도하세요.`}
+        />
+      </Shell>
     );
   }
 
-  return <GitBoard key={project.id} projectId={project.id} projectName={project.name} />;
+  return <GitBoard key={project.id} projectId={project.id} projectSelect={selector} />;
+}
+
+/** 보드를 띄울 수 없는 상태에서도 프로젝트를 바꿀 수 있도록 헤더를 유지한다. */
+function Shell({
+  selector,
+  children,
+}: {
+  selector: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <header className="flex items-center gap-3 px-4 py-2.5 border-b border-[var(--color-border)]">
+        {selector}
+      </header>
+      {children}
+    </div>
+  );
 }
 
 function EmptyState({

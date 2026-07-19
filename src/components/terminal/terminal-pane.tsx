@@ -10,10 +10,13 @@ import {
   SplitSquareHorizontal,
   SplitSquareVertical,
   X,
+  GitBranch,
 } from "lucide-react";
 import { useTerminalStore } from "@/store/terminal-store";
 import type { TerminalPane as TerminalPaneType, SplitDirection } from "@/types/terminal";
 import { NewTabMenu } from "./new-tab-menu";
+import { useProjects } from "@/hooks/use-projects";
+import { findProjectByPath } from "@/lib/project-path";
 import { usePaneDnd } from "./use-pane-dnd";
 import { cn } from "@/lib/utils";
 
@@ -401,6 +404,7 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
             title="상하 분할 (터미널 / 파일 / 메모 / URL)"
             icon={<SplitSquareVertical size={12} />}
           />
+          <GitSplitButton paneId={pane.id} paneCwd={pane.cwd} />
 
           <button
             onClick={(e) => {
@@ -426,6 +430,44 @@ export function TerminalPane({ pane, isActive, onFocus }: TerminalPaneProps) {
  * 패인 헤더의 분할 버튼 — 통합 메뉴(NewTabMenu)를 띄워 터미널/파일/메모/URL 중 선택해 분할.
  * 상단 + 버튼과 동일한 picker 를 공유한다.
  */
+/**
+ * "이 터미널이 있는 프로젝트의 Git을 옆에 열기" 버튼.
+ *
+ * cwd로 등록된 프로젝트를 역추적한다 (하위 디렉터리로 cd 했어도 최장 접두사로 매칭).
+ * 못 찾으면 버튼을 숨긴다 — 어차피 보여줄 저장소가 없으므로.
+ */
+function GitSplitButton({
+  paneId,
+  paneCwd,
+}: {
+  paneId: string;
+  paneCwd: string;
+}) {
+  const splitPane = useTerminalStore((s) => s.splitPane);
+  const { data } = useProjects();
+  const project = findProjectByPath(data?.projects ?? [], paneCwd);
+
+  if (!project) return null;
+
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        void splitPane(paneId, "horizontal", {
+          type: "git",
+          projectId: project.id,
+          title: `Git: ${project.name}`,
+        });
+      }}
+      className="p-1 rounded hover:bg-[var(--color-surface-hover)]"
+      title={`오른쪽에 Git 분할 (${project.name})`}
+      aria-label="Git 분할"
+    >
+      <GitBranch size={12} />
+    </button>
+  );
+}
+
 function SplitMenuButton({
   paneId,
   paneCwd,
@@ -460,6 +502,13 @@ function SplitMenuButton({
           type: "memo",
           memoId: memo.id,
           title: memo.title,
+        });
+      }}
+      onOpenGit={(project) => {
+        void splitPane(paneId, direction, {
+          type: "git",
+          projectId: project.id,
+          title: `Git: ${project.name}`,
         });
       }}
       trigger={

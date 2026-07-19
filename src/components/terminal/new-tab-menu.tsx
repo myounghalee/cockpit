@@ -16,13 +16,21 @@ import {
   Terminal as TerminalIcon,
   Pin,
   Clock,
+  GitBranch,
 } from "lucide-react";
 import { useProjects, useProjectTree } from "@/hooks/use-projects";
 import { useTerminalStore } from "@/store/terminal-store";
 import { cn } from "@/lib/utils";
 import type { Project, TreeNode } from "@/types/project";
 
-type Mode = "terminal" | "file" | "memo";
+type Mode = "terminal" | "file" | "memo" | "git";
+
+const MODE_META: Record<Mode, { label: string; icon: React.ReactNode }> = {
+  terminal: { label: "터미널", icon: <TerminalIcon size={11} /> },
+  file: { label: "파일", icon: <FileText size={11} /> },
+  memo: { label: "메모", icon: <StickyNote size={11} /> },
+  git: { label: "Git", icon: <GitBranch size={11} /> },
+};
 
 interface MemoItem {
   id: string;
@@ -52,6 +60,8 @@ interface NewTabMenuProps {
   onOpenBrowser: (url: string) => void;
   onOpenFile: (filePath: string) => void;
   onOpenMemo: (memo: { id: string; title: string }) => void;
+  /** Git 은 터미널 옆에 두는 게 주 용도라 splitOnly 일 때도 노출된다 */
+  onOpenGit: (project: { id: string; name: string }) => void;
 }
 
 /** URL 으로 보이는지 (단순한 휴리스틱) */
@@ -90,6 +100,7 @@ export function NewTabMenu({
   onOpenBrowser,
   onOpenFile,
   onOpenMemo,
+  onOpenGit,
 }: NewTabMenuProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = controlledOpen !== undefined;
@@ -102,6 +113,12 @@ export function NewTabMenu({
   const [mode, setMode] = useState<Mode>("terminal");
   const [query, setQuery] = useState("");
 
+  // 분할(split)로 만들 수 있는 건 터미널과 Git 뿐 — 나머지는 새 탭 전용
+  const availableModes = useMemo<Mode[]>(
+    () => (splitOnly ? ["terminal", "git"] : ["terminal", "file", "memo", "git"]),
+    [splitOnly],
+  );
+
   // open 될 때마다 초기화
   useEffect(() => {
     if (open) {
@@ -109,6 +126,11 @@ export function NewTabMenu({
       setQuery("");
     }
   }, [open]);
+
+  // splitOnly 로 바뀌었는데 현재 mode 가 분할 불가면 터미널로 되돌린다
+  useEffect(() => {
+    if (!availableModes.includes(mode)) setMode("terminal");
+  }, [availableModes, mode]);
 
   // ── 데이터 ──────────────────────────────────────────────
   const { data: projectsData } = useProjects();
@@ -184,6 +206,10 @@ export function NewTabMenu({
     onOpenMemo({ id: m.id, title: m.title || "메모" });
     close();
   };
+  const finishGit = (p: Project) => {
+    onOpenGit({ id: p.id, name: p.name });
+    close();
+  };
 
   // ── 키보드 네비게이션 ─────────────────────────────────
   const listRef = useRef<HTMLDivElement>(null);
@@ -234,10 +260,9 @@ export function NewTabMenu({
       );
       first?.click();
     } else if (e.key === "Tab") {
-      // Tab — mode 순환 (split 모드일 땐 비활성)
-      if (splitOnly) return;
+      // Tab — mode 순환 (split 모드에선 터미널/Git 둘 사이만)
       e.preventDefault();
-      const order: Mode[] = ["terminal", "file", "memo"];
+      const order = availableModes;
       const cur = order.indexOf(mode);
       const next = order[(cur + (e.shiftKey ? -1 + order.length : 1)) % order.length];
       setMode(next);
@@ -263,32 +288,21 @@ export function NewTabMenu({
           className="z-50 w-[360px] max-h-[460px] overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-0 shadow-xl flex flex-col"
           onCloseAutoFocus={(e) => e.preventDefault()}
         >
-          {/* mode 탭 */}
-          {!splitOnly && (
-            <div className="flex items-center gap-0 border-b border-[var(--color-border)] px-1 pt-1">
+          {/* mode 탭 — split 모드에선 분할 가능한 종류(터미널/Git)만 */}
+          <div className="flex items-center gap-0 border-b border-[var(--color-border)] px-1 pt-1">
+            {availableModes.map((m) => (
               <ModeTab
-                active={mode === "terminal"}
-                icon={<TerminalIcon size={11} />}
-                label="터미널"
-                onClick={() => setMode("terminal")}
+                key={m}
+                active={mode === m}
+                icon={MODE_META[m].icon}
+                label={MODE_META[m].label}
+                onClick={() => setMode(m)}
               />
-              <ModeTab
-                active={mode === "file"}
-                icon={<FileText size={11} />}
-                label="파일"
-                onClick={() => setMode("file")}
-              />
-              <ModeTab
-                active={mode === "memo"}
-                icon={<StickyNote size={11} />}
-                label="메모"
-                onClick={() => setMode("memo")}
-              />
-              <span className="ml-auto text-[10px] text-[var(--color-foreground-dim)] pr-2">
-                Tab 으로 전환
-              </span>
-            </div>
-          )}
+            ))}
+            <span className="ml-auto text-[10px] text-[var(--color-foreground-dim)] pr-2">
+              Tab 으로 전환
+            </span>
+          </div>
 
           {/* 검색 */}
           <div className="flex items-center gap-2 border-b border-[var(--color-border)] p-2">
@@ -374,6 +388,41 @@ export function NewTabMenu({
                       </div>
                     )}
                   </>
+                )}
+              </>
+            )}
+
+            {/* === Git 모드 === 프로젝트를 고르면 그 저장소의 Git 뷰를 연다 */}
+            {mode === "git" && !showAutoDetect && (
+              <>
+                {projects.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-xs text-[var(--color-foreground-dim)]">
+                    {projectsData?.projects.length === 0 ? (
+                      <>
+                        등록된 프로젝트가 없습니다.
+                        <br />
+                        Projects 메뉴에서 먼저 등록하세요.
+                      </>
+                    ) : (
+                      "일치하는 프로젝트 없음"
+                    )}
+                  </div>
+                ) : (
+                  projects.map((p) => (
+                    <PickerItem
+                      key={p.id}
+                      icon={
+                        <GitBranch
+                          size={13}
+                          className="text-[var(--color-accent)]"
+                        />
+                      }
+                      label={p.name}
+                      description={p.path}
+                      onSelect={() => finishGit(p)}
+                      onKeyDown={handleItemKeyDown}
+                    />
+                  ))
                 )}
               </>
             )}

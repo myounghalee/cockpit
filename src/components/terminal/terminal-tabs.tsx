@@ -11,9 +11,11 @@ import {
   FileText,
   Copy,
   StickyNote,
+  GitBranch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NewTabMenu } from "./new-tab-menu";
+import { isNonTerminalPane } from "@/types/terminal";
 
 const IS_MAC =
   typeof navigator !== "undefined" &&
@@ -29,6 +31,8 @@ export function TerminalTabs() {
   const createBrowserTab = useTerminalStore((s) => s.createBrowserTab);
   const createFileTab = useTerminalStore((s) => s.createFileTab);
   const createMemoTab = useTerminalStore((s) => s.createMemoTab);
+  const createGitTab = useTerminalStore((s) => s.createGitTab);
+  const splitPane = useTerminalStore((s) => s.splitPane);
   const duplicateTab = useTerminalStore((s) => s.duplicateTab);
   const renameTab = useTerminalStore((s) => s.renameTab);
   const reorderTabs = useTerminalStore((s) => s.reorderTabs);
@@ -49,7 +53,7 @@ export function TerminalTabs() {
   // 패인 헤더 분할 버튼이 "현재 패널" 을 사용하는 것과 동일한 UX.
   const activeTabRightmostCwd = (() => {
     const active = tabs.find((t) => t.id === activeTabId);
-    if (!active || active.type !== undefined && active.type !== "terminal") return null;
+    if (!active || isNonTerminalPane(active.type)) return null;
     const panes = flattenPanes(active.root);
     if (panes.length === 0) return null;
     const last = panes[panes.length - 1];
@@ -78,6 +82,23 @@ export function TerminalTabs() {
     if (pickerMode === "split") return;
     createMemoTab(memo.id, memo.title);
   };
+  // Git 은 분할도 지원 — 터미널 옆에 두고 쓰는 게 주 용도라서.
+  const handleOpenGit = (project: { id: string; name: string }) => {
+    const title = `Git: `;
+    if (pickerMode === "split") {
+      const active = tabs.find((t) => t.id === activeTabId);
+      if (!active || isNonTerminalPane(active.type)) return;
+      const panes = flattenPanes(active.root);
+      if (panes.length === 0) return;
+      void splitPane(panes[panes.length - 1].id, "horizontal", {
+        type: "git",
+        projectId: project.id,
+        title,
+      });
+      return;
+    }
+    createGitTab(project.id, title);
+  };
 
   // 탭의 "주목 알림" 상태 — 다음 중 하나가 true && acknowledged=false 면 깜빡임:
   //   (a) 방금 busy→idle 전환 (completedAt 존재 && !busy)   "명령 완료"
@@ -86,7 +107,7 @@ export function TerminalTabs() {
   // acknowledged=true 면 깜빡임 중지 (탭 클릭 시 자동 true).
   // 같은 awaitingInput 상태가 계속 와도 재트리거 안 함 (justStartedAwaiting 에서만 리셋).
   const tabRunState = (tab: (typeof tabs)[number]) => {
-    if (tab.type === "browser" || tab.type === "file" || tab.type === "memo") {
+    if (isNonTerminalPane(tab.type)) {
       return {
         attention: false,
         command: null as string | null,
@@ -178,6 +199,8 @@ export function TerminalTabs() {
             <FileText size={12} className="flex-shrink-0 opacity-70" />
           ) : tab.type === "memo" ? (
             <StickyNote size={12} className="flex-shrink-0 opacity-70" />
+          ) : tab.type === "git" ? (
+            <GitBranch size={12} className="flex-shrink-0 opacity-70" />
           ) : runState.attention ? (
             // 알림/완료 — 탭을 보면 acknowledged=true 로 바뀌어 깜빡임 중지.
             // OSC 알림이면 accent(파랑), 그 외(완료/대기)는 success(초록).
@@ -262,6 +285,7 @@ export function TerminalTabs() {
         onOpenBrowser={handleOpenBrowser}
         onOpenFile={handleOpenFile}
         onOpenMemo={handleOpenMemo}
+        onOpenGit={handleOpenGit}
         trigger={
           <button
             className="flex items-center justify-center w-8 h-full text-[var(--color-foreground-muted)] hover:text-[var(--color-foreground)] hover:bg-[var(--color-surface-hover)]"

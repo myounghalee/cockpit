@@ -11,6 +11,7 @@ import { TerminalPane } from "./terminal-pane";
 import { BrowserSplitPane } from "./browser-split-pane";
 import { FileSplitPane } from "./file-split-pane";
 import { MemoSplitPane } from "./memo-split-pane";
+import { GitSplitPane } from "./git-split-pane";
 import { useRef, useState } from "react";
 
 interface TerminalSplitProps {
@@ -64,6 +65,15 @@ function SplitNodeRenderer({
     if (node.pane.type === "memo") {
       return (
         <MemoSplitPane
+          pane={node.pane}
+          isActive={active === node.pane.id}
+          onFocus={() => onFocus(node.pane.id)}
+        />
+      );
+    }
+    if (node.pane.type === "git") {
+      return (
+        <GitSplitPane
           pane={node.pane}
           isActive={active === node.pane.id}
           onFocus={() => onFocus(node.pane.id)}

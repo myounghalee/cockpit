@@ -8,11 +8,13 @@ import {
   flattenPanes,
 } from "@/store/terminal-store";
 import { useNewTabPickerStore } from "@/store/new-tab-picker-store";
+import { isNonTerminalPane } from "@/types/terminal";
 import { TerminalTabs } from "./terminal-tabs";
 import { TerminalSplit } from "./terminal-split";
 import { BrowserPane } from "./browser-pane";
 import { FilePane } from "./file-pane";
 import { MemoPane } from "./memo-pane";
+import { GitPane } from "./git-pane";
 import { Terminal as TerminalIcon } from "lucide-react";
 
 export function TerminalWorkspace() {
@@ -67,8 +69,7 @@ export function TerminalWorkspace() {
       ) {
         const state = useTerminalStore.getState();
         const active = state.tabs.find((t) => t.id === state.activeTabId);
-        if (!active || active.type === "browser" || active.type === "file" || active.type === "memo")
-          return;
+        if (!active || isNonTerminalPane(active.type)) return;
         const panes = flattenPanes(active.root);
         if (panes.length <= 1) return;
         e.preventDefault();
@@ -143,7 +144,7 @@ export function TerminalWorkspace() {
         }
         const state = useTerminalStore.getState();
         const active = state.tabs.find((t) => t.id === state.activeTabId);
-        if (!active || active.type === "browser" || active.type === "file" || active.type === "memo") return;
+        if (!active || isNonTerminalPane(active.type)) return;
         const firstId = firstLeafPaneId(active.root);
         window.dispatchEvent(
           new CustomEvent("cockpit-focus-pane", { detail: { paneId: firstId } }),
@@ -207,6 +208,8 @@ export function TerminalWorkspace() {
                 <FilePane tabId={tab.id} initialPath={tab.url} />
               ) : tab.type === "memo" ? (
                 <MemoPane tabId={tab.id} memoId={tab.url ?? ""} />
+              ) : tab.type === "git" ? (
+                <GitPane tabId={tab.id} projectId={tab.url ?? ""} />
               ) : (
                 <TerminalSplit node={tab.root} tabId={tab.id} />
               )}

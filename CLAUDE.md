@@ -20,7 +20,10 @@ pnpm prisma:generate  # Prisma Client 재생성
 - **테스트 프레임워크가 없다.** 검증은 `pnpm typecheck` + 실제 앱 구동으로 한다.
 - `pnpm dev`는 `next dev`가 아니라 `tsx server.ts` (아래 custom server 참조). 순수 Next 명령으로는 WebSocket/PTY가 뜨지 않는다.
 - 의존성 설치 시 `postinstall`이 `node-pty` 퍼미션 픽스 + Electron 이름 패치 + `prisma generate`를 자동 수행한다.
-- 릴리즈는 `git tag vX.Y.Z && git push origin vX.Y.Z` → GitHub Actions가 .dmg/.exe 빌드 후 Releases 업로드.
+- 릴리즈는 **로컬 수동**이다. CI 빌드 워크플로우는 없다 (`.github/`에는 FUNDING.yml뿐, Actions는 Pages 배포만).
+  `package.json` 버전 올림 → `pnpm dist:mac`으로 .dmg 빌드 → `git tag vX.Y.Z && git push origin vX.Y.Z` → Releases에 에셋 수동 업로드.
+  `dist:mac`은 빌드 전에 `sync-docs-version`을 돌려 랜딩 페이지(`docs/index.html`)의 버전 표기를 `package.json`에 맞춘다 —
+  하드코딩이라 예전에 v1.0.6에 멈춘 채 3개 릴리즈가 어긋난 적이 있다.
 
 ## Architecture
 

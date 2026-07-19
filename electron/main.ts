@@ -783,6 +783,10 @@ async function checkAndApplyUpdateBackground(): Promise<void> {
 // ─── 앱 라이프사이클 ─────────────────────────────────────────
 app.whenReady().then(async () => {
   // IPC 브릿지 — renderer의 UpdateBanner에서 사용
+  // 런처(.app) 자신의 버전. 자동 업데이트가 갱신하지 못하는 유일한 부분이라,
+  // 렌더러가 최신 릴리즈와 비교해 "새 버전 설치" 안내를 띄우는 데 쓴다.
+  // (구버전 런처는 이 핸들러가 없어 렌더러가 User-Agent 폴백을 쓴다)
+  ipcMain.handle("cockpit:get-app-version", () => app.getVersion());
   ipcMain.handle("cockpit:get-update-status", () => updateStatus);
   ipcMain.handle("cockpit:get-update-error", () => updateError);
   ipcMain.handle("cockpit:apply-update", () => {

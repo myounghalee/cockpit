@@ -11,6 +11,8 @@ type UpdateStatus =
   | "failed";
 
 interface CockpitBridge {
+  /** 구버전 런처엔 없다 — 호출 전 존재 여부를 확인할 것 */
+  getAppVersion?: () => Promise<string>;
   getUpdateStatus: () => Promise<UpdateStatus>;
   onUpdateStatus: (cb: (s: UpdateStatus) => void) => () => void;
   applyUpdate: () => Promise<void>;

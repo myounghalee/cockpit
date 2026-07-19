@@ -10,6 +10,9 @@ export type CockpitUpdateStatus =
   | "failed";
 
 contextBridge.exposeInMainWorld("cockpit", {
+  /** 런처(.app) 버전 — 최신 릴리즈와 비교해 재설치 안내를 띄우는 용도 */
+  getAppVersion: (): Promise<string> =>
+    ipcRenderer.invoke("cockpit:get-app-version"),
   /** 현재 업데이트 상태 1회 조회 (컴포넌트 mount 시 초기값 용도) */
   getUpdateStatus: (): Promise<CockpitUpdateStatus> =>
     ipcRenderer.invoke("cockpit:get-update-status"),

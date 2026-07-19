@@ -15,48 +15,13 @@ import {
   FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-/** POSIX dirname 최소 구현 */
-function dirname(p: string): string {
-  const idx = p.lastIndexOf("/");
-  if (idx <= 0) return idx === 0 ? "/" : p;
-  return p.slice(0, idx);
-}
-
-/** 프로젝트 루트 기준 상대경로에서 파일명만 추출 */
-function basename(p: string): string {
-  const idx = p.lastIndexOf("/");
-  return idx < 0 ? p : p.slice(idx + 1);
-}
-
-/**
- * baseDir(프로젝트 루트 기준 상대 디렉토리)에서 rel 을 해석해 정규화된
- * 루트 기준 상대경로를 돌려준다. `.`/`..` 처리. 결과는 항상 슬래시 구분.
- */
-function resolveRelative(baseDir: string, rel: string): string {
-  const stack = rel.startsWith("/")
-    ? [] // 루트 절대경로 → 프로젝트 루트 기준
-    : baseDir.split("/").filter((s) => s && s !== ".");
-  for (const seg of rel.split("/")) {
-    if (!seg || seg === ".") continue;
-    if (seg === "..") stack.pop();
-    else stack.push(seg);
-  }
-  return stack.join("/");
-}
-
-/**
- * 마크다운 링크 href 분류.
- *  - "external": http(s)/mailto 등 스킴이 있거나 프로토콜-상대(//) → 새 창
- *  - "anchor":   같은 문서 내 #앵커 → 기본 동작(새 창 X)
- *  - "internal": 그 외 상대/루트경로 → 뷰어 내부 이동
- */
-function classifyHref(href: string): "external" | "anchor" | "internal" {
-  const h = href.trim();
-  if (h.startsWith("#")) return "anchor";
-  if (h.startsWith("//") || /^[a-z][a-z0-9+.-]*:/i.test(h)) return "external";
-  return "internal";
-}
+import {
+  basename,
+  classifyHref,
+  cleanHref,
+  dirname,
+  resolveRelative,
+} from "@/lib/markdown-links";
 
 /**
  * 뷰어 내부 이동 대상 파일 정보 계산.
@@ -67,15 +32,8 @@ function resolveInternalTarget(
   currentRelPath: string,
   projectRoot: string,
 ): SelectedFileState | null {
-  // #앵커·?쿼리 제거 후 URL 디코드
-  const clean = href.replace(/[?#].*$/, "");
-  if (!clean) return null;
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(clean);
-  } catch {
-    decoded = clean;
-  }
+  const decoded = cleanHref(href);
+  if (!decoded) return null;
   const slash = currentRelPath.lastIndexOf("/");
   const baseDir = slash < 0 ? "" : currentRelPath.slice(0, slash);
   const newRel = resolveRelative(baseDir, decoded);

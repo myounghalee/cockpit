@@ -12,6 +12,7 @@ import {
   X as XIcon,
 } from "lucide-react";
 import { useTerminalStore } from "@/store/terminal-store";
+import { classifyHref, resolveAbsoluteHref } from "@/lib/markdown-links";
 import { cn } from "@/lib/utils";
 
 interface FileResponse {
@@ -277,16 +278,47 @@ export function FilePaneContent({ paneId, initialPath }: Props) {
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
-                a: ({ href, children, ...props }) => (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    {...props}
-                  >
-                    {children}
-                  </a>
-                ),
+                // 내부 상대 링크는 새 창 대신 이 pane 안에서 이동한다.
+                // (external 만 새 창, #앵커는 기본 동작)
+                a: ({ href, children, ...props }) => {
+                  const kind = href ? classifyHref(href) : "external";
+                  if (kind === "internal" && href) {
+                    return (
+                      <a
+                        href={href}
+                        onClick={(e) => {
+                          const target = resolveAbsoluteHref(
+                            href,
+                            data.absolutePath,
+                          );
+                          if (!target) return;
+                          e.preventDefault();
+                          go(target);
+                        }}
+                        {...props}
+                      >
+                        {children}
+                      </a>
+                    );
+                  }
+                  if (kind === "anchor") {
+                    return (
+                      <a href={href} {...props}>
+                        {children}
+                      </a>
+                    );
+                  }
+                  return (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      {...props}
+                    >
+                      {children}
+                    </a>
+                  );
+                },
               }}
             >
               {data.content ?? ""}

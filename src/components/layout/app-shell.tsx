@@ -47,7 +47,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // 단축키:
   //  - Cmd/Ctrl + S       → 사이드바 토글 (어디서나)
   //  - Cmd/Ctrl + Shift+N → 빠른 메모 다이얼로그 (어디서나)
-  //  - Cmd/Ctrl + , / 0   → Settings (macOS/VSCode 관례)
+  //  - Cmd/Ctrl + ,       → Settings (macOS Preferences 관례)
   //  - Ctrl     + 1~6     → 메인 메뉴 전환 (Mac/Win 공통, metaKey 아님)
   //  - Cmd      + 1~9     → 현재 터미널 라우트에서 터미널 탭 전환 (Mac)
   //  - Alt      + 1~9     → 동일하게 터미널 탭 전환 (Windows/Linux)
@@ -65,12 +65,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Cmd/Ctrl + , (macOS Preferences 관례) 또는 Cmd/Ctrl + 0 → Settings
+      // Cmd/Ctrl + , (macOS Preferences 관례) → Settings
       if (
         (e.metaKey || e.ctrlKey) &&
         !e.shiftKey &&
         !e.altKey &&
-        (e.key === "," || e.key === "0")
+        e.key === ","
       ) {
         e.preventDefault();
         router.push("/settings");
